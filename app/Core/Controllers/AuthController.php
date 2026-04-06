@@ -1,0 +1,143 @@
+<?php
+// app/Controllers/AuthController.php
+
+class AuthController extends Controller {
+    private UserModel $userModel;
+    private ClubModel $clubModel;
+
+    public function __construct() {
+        parent::__construct();
+        $this->userModel = new UserModel();
+        $this->clubModel = new ClubModel();
+    }
+
+    public function showLogin(): void {
+        if (Auth::check()) {
+            $this->redirect('/dashboard');
+        }
+        $this->view('auth/login');
+    }
+
+    public function login(): void {
+        $email    = trim($_POST['email'] ?? '');
+        $password = $_POST['password'] ?? '';
+
+        if (!$email || !$password) {
+            $this->view('auth/login', ['error' => 'ایمیل و رمز عبور الزامی است']);
+            return;
+        }
+
+        $user = $this->userModel->findByEmail($email);
+        if (!$user || !$this->userModel->verifyPassword($password, $user['password'])) {
+            $this->view('auth/login', ['error' => 'اطلاعات ورود نادرست است']);
+            return;
+        }
+
+        Auth::login($user);
+        $this->userModel->updateLastLogin($user['id']);
+        $this->redirect('/dashboard');
+    }
+
+    public function showRegister(): void {
+        if (Auth::check()) {
+            $this->redirect('/dashboard');
+        }
+        $this->view('auth/register');
+    }
+
+    public function register(): void {
+        $username = trim($_POST['username'] ?? '');
+        $email    = trim($_POST['email'] ?? '');
+        $password = $_POST['password'] ?? '';
+        $confirm  = $_POST['password_confirm'] ?? '';
+
+        if (!$username || !$email || !$password) {
+            $this->view('auth/register', ['error' => 'تمام فیلدها الزامی است']);
+            return;
+        }
+
+        if ($password !== $confirm) {
+            $this->view('auth/register', ['error' => 'رمز عبور و تکرار آن مطابقت ندارند']);
+            return;
+        }
+
+        if (strlen($password) < 6) {
+            $this->view('auth/register', ['error' => 'رمز عبور باید حداقل ۶ کاراکتر باشد']);
+            return;
+        }
+
+        if ($this->userModel->findByEmail($email)) {
+            $this->view('auth/register', ['error' => 'این ایمیل قبلاً ثبت شده است']);
+            return;
+        }
+
+        if ($this->userModel->findByUsername($username)) {
+            $this->view('auth/register', ['error' => 'این نام کاربری قبلاً استفاده شده است']);
+            return;
+        }
+
+        $userId = $this->userModel->register([
+            'username' => $username,
+            'email'    => $email,
+            'password' => $password,
+            'role'     => 'MANAGER'
+        ]);
+
+        if (!$userId) {
+            $this->view('auth/register', ['error' => 'خطا در ثبت‌نام، دوباره تلاش کنید']);
+            return;
+        }
+
+        $user = $this->userModel->find($userId);
+        Auth::login($user);
+        $this->redirect('/club/select');
+    }
+
+    public function logout(): void {
+        Auth::logout();
+        $this->redirect('/login');
+    }
+
+    public function selectClub(): void {
+        if (!Auth::check()) {
+            $this->redirect('/login');
+        }
+
+        $userClub = $this->userModel->getClub(Auth::id());
+        if ($userClub) {
+            $this->redirect('/dashboard');
+        }
+
+        $availableClubs = $this->clubModel->getUnmanaged();
+        $this->view('auth/select-club', ['clubs' => $availableClubs]);
+    }
+
+    public function assignClub(): void {
+        if (!Auth::check()) {
+            $this->redirect('/login');
+        }
+
+        $clubId = (int)($_POST['club_id'] ?? 0);
+        if (!$clubId) {
+            $availableClubs = $this->clubModel->getUnmanaged();
+            $this->view('auth/select-club', [
+                'clubs' => $availableClubs,
+                'error' => 'باشگاه انتخاب نشده است'
+            ]);
+            return;
+        }
+
+        $club = $this->clubModel->find($clubId);
+        if (!$club || $club['manager_id']) {
+            $availableClubs = $this->clubModel->getUnmanaged();
+            $this->view('auth/select-club', [
+                'clubs' => $availableClubs,
+                'error' => 'این باشگاه در دسترس نیست'
+            ]);
+            return;
+        }
+
+        $this->clubModel->assignManager($clubId, Auth::id());
+        $this->redirect('/dashboard');
+    }
+}
