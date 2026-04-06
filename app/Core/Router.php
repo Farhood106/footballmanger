@@ -45,7 +45,7 @@ class Router {
 
                 require_once $controllerFile;
                 $controller = new $controllerName();
-                $controller->$action($params);
+                $this->invokeAction($controller, $action, $params);
                 return;
             }
         }
@@ -56,5 +56,37 @@ class Router {
     private function abort(int $code, string $message): void {
         http_response_code($code);
         echo "<h1>$code</h1><p>$message</p>";
+    }
+
+    private function invokeAction(object $controller, string $action, array $params): void {
+        if (!method_exists($controller, $action)) {
+            $this->abort(500, "Action not found: {$action}");
+            return;
+        }
+
+        $reflection = new ReflectionMethod($controller, $action);
+        $expected = $reflection->getNumberOfParameters();
+
+        if ($expected === 0) {
+            $controller->$action();
+            return;
+        }
+
+        $routeValues = array_values($params);
+
+        if ($expected === 1) {
+            $firstParam = $reflection->getParameters()[0];
+            $type = $firstParam->getType();
+
+            if ($type instanceof ReflectionNamedType && $type->getName() === 'array') {
+                $controller->$action($params);
+                return;
+            }
+
+            $controller->$action($routeValues[0] ?? null);
+            return;
+        }
+
+        $controller->$action(...array_slice($routeValues, 0, $expected));
     }
 }
