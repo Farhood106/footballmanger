@@ -29,7 +29,7 @@ class MatchEngine {
             throw new Exception("Match not available for simulation");
         }
 
-        $this->db->update('matches', ['status' => 'LIVE'], 'id = :id', ['id' => $matchId]);
+        $this->db->query("UPDATE matches SET status = 'LIVE' WHERE id = ?", [$matchId]);
 
         // ۱. بارگذاری داده‌ها
         $homeSquad = $this->getSquad($match['home_club_id']);
@@ -459,14 +459,18 @@ class MatchEngine {
 
         try {
             // آپدیت نتیجه
-            $this->db->update('matches', [
-                'home_score' => $homeGoals,
-                'away_score' => $awayGoals,
-                'status' => 'FINISHED',
-                'stats' => json_encode($stats),
-                'home_xg' => $xG['home'],
-                'away_xg' => $xG['away']
-            ], 'id = :id', ['id' => $matchId]);
+            $this->db->query(
+                "UPDATE matches
+                 SET home_score = ?,
+                     away_score = ?,
+                     status = 'FINISHED',
+                     stats = ?,
+                     home_xg = ?,
+                     away_xg = ?,
+                     played_at = NOW()
+                 WHERE id = ?",
+                [$homeGoals, $awayGoals, json_encode($stats), $xG['home'], $xG['away'], $matchId]
+            );
 
             // ذخیره رویدادها
             foreach ($events as $event) {
@@ -478,13 +482,15 @@ class MatchEngine {
                 $this->db->insert('player_match_ratings', [
                     'match_id' => $matchId,
                     'player_id' => $rating['player_id'],
-                    'rating' => $rating['rating']
+                    'rating' => $rating['rating'],
+                    'goals' => $rating['goals'],
+                    'assists' => $rating['assists']
                 ]);
             }
 
             $this->db->commit();
         } catch (Exception $e) {
-            $this->db->rollback();
+            $this->db->rollBack();
             throw $e;
         }
     }
@@ -513,11 +519,10 @@ class MatchEngine {
             };
             $newMorale = max(1, min(10, $player['morale'] + $moraleDelta));
 
-            $this->db->update('players', [
-                'form' => round($newForm, 1),
-                'fatigue' => $newFatigue,
-                'morale' => round($newMorale, 1)
-            ], 'id = :id', ['id' => $playerId]);
+            $this->db->query(
+                "UPDATE players SET form = ?, fatigue = ?, morale = ? WHERE id = ?",
+                [round($newForm, 1), $newFatigue, round($newMorale, 1), $playerId]
+            );
 
             // مصدومیت
             $injury = current(array_filter($events, fn($e) => $e['type'] === 'INJURY' && $e['player_id'] === $playerId));
@@ -525,10 +530,12 @@ class MatchEngine {
                 $details = json_decode($injury['details'], true);
                 $this->db->insert('injuries', [
                     'player_id' => $playerId,
+                    'type' => $this->randomInjuryType(),
                     'severity' => $details['severity'],
-                    'return_date' => date('Y-m-d', strtotime("+{$details['severity']} days"))
+                    'match_id' => $injury['match_id'] ?? null,
+                    'recovered_at' => date('Y-m-d H:i:s', strtotime("+{$details['severity']} days"))
                 ]);
-                $this->db->update('players', ['is_injured' => 1], 'id = :id', ['id' => $playerId]);
+                $this->db->query("UPDATE players SET is_injured = 1, injury_days = ? WHERE id = ?", [$details['severity'], $playerId]);
             }
 
             // آپدیت آمار فصل
@@ -554,7 +561,7 @@ class MatchEngine {
                  SET appearances = appearances + 1,
                      goals = goals + :goals,
                      assists = assists + :assists,
-                     average_rating = ((average_rating * appearances) + :rating) / (appearances + 1)
+                     avg_rating = ((avg_rating * appearances) + :rating) / (appearances + 1)
                  WHERE player_id = :pid AND season_id = :sid",
                 [
                     'goals' => $rating['goals'],
@@ -568,10 +575,11 @@ class MatchEngine {
             $this->db->insert('player_season_stats', [
                 'player_id' => $playerId,
                 'season_id' => $seasonId,
+                'club_id' => $this->getPlayerClubId($playerId),
                 'appearances' => 1,
                 'goals' => $rating['goals'],
                 'assists' => $rating['assists'],
-                'average_rating' => $rating['rating']
+                'avg_rating' => $rating['rating']
             ]);
         }
     }
@@ -654,12 +662,43 @@ class MatchEngine {
             $awayUpdate['lost'] = $awayStanding['lost'] + 1;
         }
 
-        $this->db->update('standings', $homeUpdate, 'id = :id', ['id' => $homeStanding['id']]);
-        $this->db->update('standings', $awayUpdate, 'id = :id', ['id' => $awayStanding['id']]);
+        $this->persistStanding($homeStanding['id'], $homeUpdate);
+        $this->persistStanding($awayStanding['id'], $awayUpdate);
     }
 
     private function getCurrentSeasonId(): int {
-        $season = $this->db->fetchOne("SELECT id FROM seasons WHERE is_active = 1 LIMIT 1");
+        $season = $this->db->fetchOne("SELECT id FROM seasons WHERE status = 'ACTIVE' LIMIT 1");
         return $season['id'] ?? 1;
+    }
+
+    private function getPlayerClubId(int $playerId): int {
+        $player = $this->db->fetchOne("SELECT club_id FROM players WHERE id = ?", [$playerId]);
+        return (int)($player['club_id'] ?? 0);
+    }
+
+    private function persistStanding(int $standingId, array $update): void {
+        $goalDiff = (int)$update['goals_for'] - (int)$update['goals_against'];
+        $this->db->query(
+            "UPDATE standings
+             SET played = ?, won = ?, drawn = ?, lost = ?,
+                 goals_for = ?, goals_against = ?, goal_diff = ?, points = ?
+             WHERE id = ?",
+            [
+                $update['played'],
+                $update['won'] ?? 0,
+                $update['drawn'] ?? 0,
+                $update['lost'] ?? 0,
+                $update['goals_for'],
+                $update['goals_against'],
+                $goalDiff,
+                $update['points'] ?? 0,
+                $standingId
+            ]
+        );
+    }
+
+    private function randomInjuryType(): string {
+        $types = ['MUSCLE', 'KNEE', 'ANKLE', 'HAMSTRING', 'BACK', 'SHOULDER', 'CONCUSSION'];
+        return $types[array_rand($types)];
     }
 }

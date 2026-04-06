@@ -13,10 +13,11 @@ class MatchModel extends BaseModel {
              FROM matches m
              JOIN clubs hc ON m.home_club_id = hc.id
              JOIN clubs ac ON m.away_club_id = ac.id
-             JOIN competitions comp ON m.competition_id = comp.id
+             JOIN seasons s ON m.season_id = s.id
+             JOIN competitions comp ON s.competition_id = comp.id
              WHERE m.status = 'SCHEDULED'
-               AND m.match_time <= NOW()
-             ORDER BY m.match_time ASC"
+               AND m.scheduled_at <= NOW()
+             ORDER BY m.scheduled_at ASC"
         );
     }
 
@@ -30,7 +31,7 @@ class MatchModel extends BaseModel {
              JOIN clubs ac ON m.away_club_id = ac.id
              WHERE (m.home_club_id = ? OR m.away_club_id = ?)
                AND m.status = 'FINISHED'
-             ORDER BY m.match_time DESC
+             ORDER BY m.scheduled_at DESC
              LIMIT ?",
             [$clubId, $clubId, $limit]
         );
@@ -45,10 +46,11 @@ class MatchModel extends BaseModel {
              FROM matches m
              JOIN clubs hc ON m.home_club_id = hc.id
              JOIN clubs ac ON m.away_club_id = ac.id
-             JOIN competitions comp ON m.competition_id = comp.id
+             JOIN seasons s ON m.season_id = s.id
+             JOIN competitions comp ON s.competition_id = comp.id
              WHERE (m.home_club_id = ? OR m.away_club_id = ?)
                AND m.status = 'SCHEDULED'
-             ORDER BY m.match_time ASC
+             ORDER BY m.scheduled_at ASC
              LIMIT ?",
             [$clubId, $clubId, $limit]
         );
@@ -79,12 +81,13 @@ class MatchModel extends BaseModel {
         return $match;
     }
 
-    public function scheduleMatch(int $homeId, int $awayId, int $competitionId, string $matchTime): int {
+    public function scheduleMatch(int $seasonId, int $homeId, int $awayId, int $week, string $scheduledAt): int {
         return $this->create([
+            'season_id'      => $seasonId,
             'home_club_id'   => $homeId,
             'away_club_id'   => $awayId,
-            'competition_id' => $competitionId,
-            'match_time'     => $matchTime,
+            'week'           => $week,
+            'scheduled_at'   => $scheduledAt,
             'status'         => 'SCHEDULED'
         ]);
     }
@@ -95,7 +98,7 @@ class MatchModel extends BaseModel {
              WHERE ((home_club_id = ? AND away_club_id = ?)
                 OR  (home_club_id = ? AND away_club_id = ?))
                AND status = 'FINISHED'
-             ORDER BY match_time DESC
+             ORDER BY scheduled_at DESC
              LIMIT ?",
             [$clubA, $clubB, $clubB, $clubA, $limit]
         );
