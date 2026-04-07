@@ -48,6 +48,9 @@
                 <a href="/matches">بازی‌ها</a>
                 <a href="/transfers">نقل و انتقالات</a>
                 <a href="/competition/1/standings">جدول</a>
+                <?php if (Auth::gameRole() === 'OWNER'): ?>
+                    <a href="/ownership/request">مالکیت باشگاه</a>
+                <?php endif; ?>
                 <?php if (Auth::isAdmin()): ?>
                     <a href="/admin">مدیریت سایت</a>
                 <?php endif; ?>

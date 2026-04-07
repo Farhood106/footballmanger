@@ -96,6 +96,11 @@ class Auth {
         return isset($user['role']) && $user['role'] === 'ADMIN';
     }
 
+    public static function gameRole(): string {
+        $user = self::user();
+        return $user['game_role'] ?? 'COACH';
+    }
+
     public static function login(int $userId): void {
         $db = Database::getInstance();
         $user = $db->fetchOne("SELECT * FROM `users` WHERE `id` = ?", [$userId]);

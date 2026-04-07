@@ -22,6 +22,9 @@ class DashboardController extends Controller {
 
         $club = $this->userModel->getClub(Auth::id());
         if (!$club) {
+            if (Auth::gameRole() === 'OWNER') {
+                $this->redirect('/ownership/request');
+            }
             $this->redirect('/club/select');
         }
 

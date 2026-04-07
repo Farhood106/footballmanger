@@ -59,6 +59,10 @@ $router->post('/transfer/reject/{id}', 'TransferController@rejectBid');
 $router->get('/competition/{id}/standings', 'CompetitionController@standings');
 $router->get('/competition/{id}/fixtures', 'CompetitionController@fixtures');
 
+// Ownership requests
+$router->get('/ownership/request', 'OwnershipController@requestForm');
+$router->post('/ownership/request', 'OwnershipController@submitRequest');
+
 // Admin
 $router->get('/admin', 'AdminController@index');
 $router->get('/admin/clubs/create', 'AdminController@createClubForm');

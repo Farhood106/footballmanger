@@ -22,6 +22,7 @@ class UserModel extends BaseModel {
             'email'         => $data['email'],
             'password_hash' => password_hash($data['password'], PASSWORD_BCRYPT),
             'role'          => $data['role'] ?? 'MANAGER',
+            'game_role'     => $data['game_role'] ?? 'COACH',
             'created_at'    => date('Y-m-d H:i:s')
         ]);
     }
@@ -36,8 +37,10 @@ class UserModel extends BaseModel {
 
     public function getClub(int $userId): ?array {
         return $this->db->fetchOne(
-            "SELECT c.* FROM clubs c WHERE c.user_id = ?",
-            [$userId]
+            "SELECT c.* FROM clubs c 
+             WHERE c.manager_user_id = ? OR c.owner_user_id = ? OR c.user_id = ?
+             LIMIT 1",
+            [$userId, $userId, $userId]
         );
     }
 

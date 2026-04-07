@@ -38,6 +38,9 @@ class AuthController extends Controller {
         if (Auth::isAdmin()) {
             $this->redirect('/admin');
         }
+        if (Auth::gameRole() === 'OWNER') {
+            $this->redirect('/ownership/request');
+        }
         $this->redirect('/dashboard');
     }
 
@@ -53,6 +56,7 @@ class AuthController extends Controller {
         $email    = trim($_POST['email'] ?? '');
         $password = $_POST['password'] ?? '';
         $confirm  = $_POST['password_confirm'] ?? '';
+        $accountType = $_POST['account_type'] ?? 'COACH';
 
         if (!$username || !$email || !$password) {
             $this->view('auth/register', ['error' => 'تمام فیلدها الزامی است']);
@@ -83,7 +87,8 @@ class AuthController extends Controller {
             'username' => $username,
             'email'    => $email,
             'password' => $password,
-            'role'     => 'MANAGER'
+            'role'     => 'MANAGER',
+            'game_role'=> $accountType === 'OWNER' ? 'OWNER' : 'COACH'
         ]);
 
         if (!$userId) {
@@ -92,6 +97,9 @@ class AuthController extends Controller {
         }
 
         Auth::login((int)$userId);
+        if (Auth::gameRole() === 'OWNER') {
+            $this->redirect('/ownership/request');
+        }
         $this->redirect('/club/select');
     }
 
@@ -130,7 +138,7 @@ class AuthController extends Controller {
         }
 
         $club = $this->clubModel->find($clubId);
-        if (!$club || !empty($club['user_id'])) {
+        if (!$club || !empty($club['manager_user_id'])) {
             $availableClubs = $this->clubModel->getUnmanaged();
             $this->view('auth/select-club', [
                 'clubs' => $availableClubs,

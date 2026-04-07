@@ -30,6 +30,14 @@
             <input type="password" name="password_confirm" required>
         </div>
 
+        <div class="form-group">
+            <label>نوع ثبت‌نام</label>
+            <select name="account_type" required>
+                <option value="COACH" <?= (($_POST['account_type'] ?? '') === 'COACH') ? 'selected' : '' ?>>مربی</option>
+                <option value="OWNER" <?= (($_POST['account_type'] ?? '') === 'OWNER') ? 'selected' : '' ?>>مالک (درخواست خرید باشگاه)</option>
+            </select>
+        </div>
+
         <button type="submit" class="btn" style="width: 100%;">ثبت‌نام</button>
     </form>
 

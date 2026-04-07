@@ -7,9 +7,11 @@ class ClubModel extends BaseModel {
     public function getWithDetails(int $clubId): ?array {
         return $this->db->fetchOne(
             "SELECT c.*,
-                    u.username AS manager_name
+                    owner.username AS owner_name,
+                    manager.username AS manager_name
              FROM clubs c
-             LEFT JOIN users u ON c.user_id = u.id
+             LEFT JOIN users owner ON c.owner_user_id = owner.id
+             LEFT JOIN users manager ON c.manager_user_id = manager.id
              WHERE c.id = ?",
             [$clubId]
         );
@@ -59,22 +61,32 @@ class ClubModel extends BaseModel {
     }
 
     public function getUnowned(): array {
-        return $this->db->fetchAll("SELECT * FROM clubs WHERE user_id IS NULL ORDER BY reputation DESC, id ASC");
+        return $this->db->fetchAll("SELECT * FROM clubs WHERE owner_user_id IS NULL ORDER BY reputation DESC, id ASC");
     }
 
     public function getUnmanaged(): array {
-        return $this->getUnowned();
+        return $this->db->fetchAll("SELECT * FROM clubs WHERE manager_user_id IS NULL ORDER BY reputation DESC, id ASC");
     }
 
     public function assignManager(int $clubId, int $userId): bool {
         return $this->db->execute(
-            "UPDATE clubs SET user_id = ? WHERE id = ? AND user_id IS NULL",
-            [$userId, $clubId]
+            "UPDATE clubs SET manager_user_id = ?, user_id = ? WHERE id = ? AND manager_user_id IS NULL",
+            [$userId, $userId, $clubId]
         ) > 0;
     }
 
     public function removeManager(int $clubId): bool {
-        return $this->update($clubId, ['user_id' => null]);
+        return $this->db->execute(
+            "UPDATE clubs SET manager_user_id = NULL, user_id = NULL WHERE id = ?",
+            [$clubId]
+        ) > 0;
+    }
+
+    public function assignOwner(int $clubId, int $userId): bool {
+        return $this->db->execute(
+            "UPDATE clubs SET owner_user_id = ? WHERE id = ? AND owner_user_id IS NULL",
+            [$userId, $clubId]
+        ) > 0;
     }
 
     public function updateBudget(int $clubId, float $amount): bool {

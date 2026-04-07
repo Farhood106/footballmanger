@@ -10,6 +10,7 @@ CREATE TABLE users (
     username VARCHAR(100) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     role ENUM('MANAGER', 'ADMIN') DEFAULT 'MANAGER',
+    game_role ENUM('COACH', 'OWNER') DEFAULT 'COACH',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_email (email),
@@ -31,6 +32,8 @@ CREATE TABLE sessions (
 CREATE TABLE clubs (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT UNIQUE,
+    owner_user_id INT UNIQUE,
+    manager_user_id INT UNIQUE,
     name VARCHAR(255) UNIQUE NOT NULL,
     short_name VARCHAR(10) NOT NULL,
     country VARCHAR(100) NOT NULL,
@@ -44,7 +47,29 @@ CREATE TABLE clubs (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
-    INDEX idx_user (user_id)
+    FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (manager_user_id) REFERENCES users(id) ON DELETE SET NULL,
+    INDEX idx_user (user_id),
+    INDEX idx_owner (owner_user_id),
+    INDEX idx_manager (manager_user_id)
+) ENGINE=InnoDB;
+
+-- Club Ownership Requests
+CREATE TABLE club_ownership_requests (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    club_id INT NOT NULL,
+    offer_amount BIGINT DEFAULT 0,
+    message TEXT,
+    status ENUM('PENDING','APPROVED','REJECTED','CANCELLED') DEFAULT 'PENDING',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    reviewed_at DATETIME,
+    reviewed_by INT,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
+    FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL,
+    INDEX idx_request_status (status),
+    UNIQUE KEY unique_pending_request (user_id, club_id, status)
 ) ENGINE=InnoDB;
 
 -- Players
