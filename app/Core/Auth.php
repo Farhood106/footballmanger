@@ -35,20 +35,15 @@ class Auth {
 
         $db = Database::getInstance();
         $token = bin2hex(random_bytes(self::TOKEN_LENGTH));
-        $userAgent = substr($_SERVER['HTTP_USER_AGENT'] ?? 'unknown', 0, 255);
-        $ipAddress = self::getClientIp();
         $expiresAt = date('Y-m-d H:i:s', time() + self::SESSION_LIFETIME);
 
-        // Revoke old sessions (optional: keep last N sessions)
-        $db->execute(
-            "UPDATE `user_sessions` SET `is_revoked` = 1 WHERE `user_id` = ? AND `is_revoked` = 0",
-            [$user['id']]
-        );
+        // Remove previous sessions for this user (single active session policy)
+        $db->execute("DELETE FROM `sessions` WHERE `user_id` = ?", [$user['id']]);
 
         $db->execute(
-            "INSERT INTO `user_sessions` (`user_id`, `token`, `user_agent`, `ip_address`, `expires_at`, `created_at`) 
-             VALUES (?, ?, ?, ?, ?, NOW())",
-            [$user['id'], $token, $userAgent, $ipAddress, $expiresAt]
+            "INSERT INTO `sessions` (`user_id`, `token`, `expires_at`, `created_at`) 
+             VALUES (?, ?, ?, NOW())",
+            [$user['id'], $token, $expiresAt]
         );
 
         $_SESSION['auth_token'] = $token;
@@ -72,9 +67,8 @@ class Auth {
         $db = Database::getInstance();
         $session = $db->fetchOne(
             "SELECT u.* FROM `users` u 
-             JOIN `user_sessions` s ON u.id = s.user_id 
+             JOIN `sessions` s ON u.id = s.user_id 
              WHERE s.token = ? 
-               AND s.is_revoked = 0 
                AND s.expires_at > NOW()
              ORDER BY s.created_at DESC 
              LIMIT 1",
@@ -110,7 +104,7 @@ class Auth {
         if (!empty($_SESSION['auth_token'])) {
             $db = Database::getInstance();
             $db->execute(
-                "UPDATE `user_sessions` SET `is_revoked` = 1 WHERE `token` = ?",
+                "DELETE FROM `sessions` WHERE `token` = ?",
                 [$_SESSION['auth_token']]
             );
         }
