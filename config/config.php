@@ -4,15 +4,15 @@
 return [
     'db' => [
         'host' => 'localhost',
-        'name' => 'itshomar_footballgame',
-        'user' => 'itshomar_footballgame',
+        'name' => 'hdhossei_footballgame',
+        'user' => 'hdhossei_footballgame',
         'pass' => 'Om65%Z+RFG]8,k;O',
         'charset' => 'utf8mb4'
     ],
 
     'app' => [
         'name' => 'Football Manager',
-        'url' => 'http://itshomar.ir/',
+        'url' => 'http://football.p30script.com/',
         'timezone' => 'Asia/Tehran',
         'locale' => 'fa'
     ],
