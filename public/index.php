@@ -59,5 +59,12 @@ $router->post('/transfer/reject/{id}', 'TransferController@rejectBid');
 $router->get('/competition/{id}/standings', 'CompetitionController@standings');
 $router->get('/competition/{id}/fixtures', 'CompetitionController@fixtures');
 
+// Admin
+$router->get('/admin', 'AdminController@index');
+$router->get('/admin/clubs/create', 'AdminController@createClubForm');
+$router->post('/admin/clubs/create', 'AdminController@storeClub');
+$router->get('/admin/players/create', 'AdminController@createPlayerForm');
+$router->post('/admin/players/create', 'AdminController@storePlayer');
+
 // Dispatch request
 $router->dispatch();

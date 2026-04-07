@@ -28,13 +28,16 @@ class AuthController extends Controller {
         }
 
         $user = $this->userModel->findByEmail($email);
-        if (!$user || !$this->userModel->verifyPassword($password, $user['password'])) {
+        if (!$user || !$this->userModel->verifyPassword($password, $user['password_hash'] ?? null)) {
             $this->view('auth/login', ['error' => 'اطلاعات ورود نادرست است']);
             return;
         }
 
-        Auth::login($user);
+        Auth::login((int)$user['id']);
         $this->userModel->updateLastLogin($user['id']);
+        if (Auth::isAdmin()) {
+            $this->redirect('/admin');
+        }
         $this->redirect('/dashboard');
     }
 
@@ -88,8 +91,7 @@ class AuthController extends Controller {
             return;
         }
 
-        $user = $this->userModel->find($userId);
-        Auth::login($user);
+        Auth::login((int)$userId);
         $this->redirect('/club/select');
     }
 
@@ -128,7 +130,7 @@ class AuthController extends Controller {
         }
 
         $club = $this->clubModel->find($clubId);
-        if (!$club || $club['manager_id']) {
+        if (!$club || !empty($club['user_id'])) {
             $availableClubs = $this->clubModel->getUnmanaged();
             $this->view('auth/select-club', [
                 'clubs' => $availableClubs,

@@ -7,15 +7,9 @@ class ClubModel extends BaseModel {
     public function getWithDetails(int $clubId): ?array {
         return $this->db->fetchOne(
             "SELECT c.*,
-                    u1.username AS owner_name,
-                    u2.username AS manager_name,
-                    d.name AS division_name,
-                    l.name AS league_name
+                    u.username AS manager_name
              FROM clubs c
-             LEFT JOIN users u1 ON c.owner_id = u1.id
-             LEFT JOIN users u2 ON c.manager_id = u2.id
-             LEFT JOIN divisions d ON c.division_id = d.id
-             LEFT JOIN leagues l ON d.league_id = l.id
+             LEFT JOIN users u ON c.user_id = u.id
              WHERE c.id = ?",
             [$clubId]
         );
@@ -28,9 +22,9 @@ class ClubModel extends BaseModel {
              FROM players p
              LEFT JOIN player_abilities pa ON p.id = pa.player_id AND pa.is_active = 1
              LEFT JOIN abilities a ON pa.ability_id = a.id
-             WHERE p.club_id = ? AND p.is_active = 1
+             WHERE p.club_id = ? AND p.is_retired = 0
              GROUP BY p.id
-             ORDER BY p.position, p.overall_rating DESC",
+             ORDER BY p.position, p.overall DESC",
             [$clubId]
         );
     }
@@ -49,7 +43,7 @@ class ClubModel extends BaseModel {
 
     public function getFinances(int $clubId): ?array {
         return $this->db->fetchOne(
-            "SELECT * FROM club_finances WHERE club_id = ? ORDER BY updated_at DESC LIMIT 1",
+            "SELECT * FROM finances WHERE club_id = ? ORDER BY date DESC LIMIT 1",
             [$clubId]
         );
     }
@@ -65,25 +59,28 @@ class ClubModel extends BaseModel {
     }
 
     public function getUnowned(): array {
-        return $this->findAll('owner_id IS NULL AND is_active = 1');
+        return $this->db->fetchAll("SELECT * FROM clubs WHERE user_id IS NULL ORDER BY reputation DESC, id ASC");
     }
 
     public function getUnmanaged(): array {
-        return $this->findAll('manager_id IS NULL AND is_active = 1');
+        return $this->getUnowned();
     }
 
     public function assignManager(int $clubId, int $userId): bool {
-        return $this->update($clubId, ['manager_id' => $userId]);
+        return $this->db->execute(
+            "UPDATE clubs SET user_id = ? WHERE id = ? AND user_id IS NULL",
+            [$userId, $clubId]
+        ) > 0;
     }
 
     public function removeManager(int $clubId): bool {
-        return $this->update($clubId, ['manager_id' => null]);
+        return $this->update($clubId, ['user_id' => null]);
     }
 
     public function updateBudget(int $clubId, float $amount): bool {
-        return $this->db->query(
-            "UPDATE clubs SET budget = budget + ? WHERE id = ?",
+        return $this->db->execute(
+            "UPDATE clubs SET balance = balance + ? WHERE id = ?",
             [$amount, $clubId]
-        );
+        ) > 0;
     }
 }
