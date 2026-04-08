@@ -50,7 +50,7 @@ class Database {
             return $stmt;
         } catch (PDOException $e) {
             error_log('[DB Query Error] ' . $e->getMessage() . ' | SQL: ' . $sql);
-            throw new RuntimeException('خطا در اجرای کوئری.');
+            throw new RuntimeException('خطا در اجرای کوئری: ' . $e->getMessage());
         }
     }
 

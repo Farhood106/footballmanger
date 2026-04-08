@@ -69,7 +69,7 @@ class AdminController extends Controller {
                 return;
             }
 
-            $this->applyNotNullDefaults($payload, $meta);
+            $this->applyNotNullDefaults($payload, $meta, 'clubs');
             $this->db->insert('clubs', $payload);
         } catch (Throwable $e) {
             $this->view('admin/create-club', ['error' => 'خطا در ثبت باشگاه: ' . $e->getMessage()]);
@@ -129,7 +129,7 @@ class AdminController extends Controller {
             $this->setIfColumnExists($payload, $columns, 'wage', (int)($_POST['wage'] ?? 0));
             $this->setIfColumnExists($payload, $columns, 'market_value', (int)($_POST['market_value'] ?? 0));
 
-            $this->applyNotNullDefaults($payload, $meta);
+            $this->applyNotNullDefaults($payload, $meta, 'players');
             $this->db->insert('players', $payload);
         } catch (Throwable $e) {
             $clubs = $this->clubModel->findAll([], 'name ASC');
@@ -164,7 +164,7 @@ class AdminController extends Controller {
         }
     }
 
-    private function applyNotNullDefaults(array &$payload, array $meta): void {
+    private function applyNotNullDefaults(array &$payload, array $meta, string $table): void {
         foreach ($meta as $field => $info) {
             $isMissing = !array_key_exists($field, $payload);
             $isNotNull = strtoupper((string)$info['Null']) === 'NO';
@@ -176,7 +176,9 @@ class AdminController extends Controller {
             }
 
             $type = strtolower((string)$info['Type']);
-            if (str_starts_with($type, 'int') || str_starts_with($type, 'bigint')) {
+            if (str_ends_with($field, '_id')) {
+                $payload[$field] = $this->resolveForeignKeyDefault($field);
+            } elseif (str_starts_with($type, 'int') || str_starts_with($type, 'bigint')) {
                 $payload[$field] = 0;
             } elseif (str_starts_with($type, 'decimal') || str_starts_with($type, 'float') || str_starts_with($type, 'double')) {
                 $payload[$field] = 0;
@@ -190,6 +192,26 @@ class AdminController extends Controller {
             } else {
                 $payload[$field] = '-';
             }
+        }
+    }
+
+    private function resolveForeignKeyDefault(string $field): int {
+        return match ($field) {
+            'user_id', 'manager_user_id', 'owner_user_id', 'reviewed_by', 'initiated_by' => (int)(Auth::id() ?? 1),
+            'competition_id' => $this->firstIdOrFallback('competitions'),
+            'season_id' => $this->firstIdOrFallback('seasons'),
+            'club_id', 'from_club_id', 'to_club_id' => $this->firstIdOrFallback('clubs'),
+            'player_id', 'assist_player_id', 'captain', 'corner_taker', 'freekick_taker', 'penalty_taker' => $this->firstIdOrFallback('players'),
+            default => 1
+        };
+    }
+
+    private function firstIdOrFallback(string $table): int {
+        try {
+            $row = $this->db->fetchOne("SELECT id FROM `{$table}` ORDER BY id ASC LIMIT 1");
+            return (int)($row['id'] ?? 1);
+        } catch (Throwable $e) {
+            return 1;
         }
     }
 }
