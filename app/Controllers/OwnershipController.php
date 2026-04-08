@@ -59,6 +59,35 @@ class OwnershipController extends Controller {
         ]);
     }
 
+    public function manageRequests(): void {
+        $this->requireAuth();
+
+        $userId = (int)Auth::id();
+        $isAdmin = Auth::isAdmin();
+        $isOwner = Auth::gameRole() === 'OWNER';
+
+        if (!$isAdmin && !$isOwner) {
+            $this->redirect('/dashboard');
+        }
+
+        $pending = $isAdmin
+            ? $this->requestModel->getPendingForAdmin()
+            : $this->requestModel->getPendingForOwner($userId);
+
+        $this->view('ownership/manage', [
+            'pending' => $pending,
+            'can_admin_override' => $isAdmin
+        ]);
+    }
+
+    public function approveRequest(): void {
+        $this->reviewRequestAction(true);
+    }
+
+    public function rejectRequest(): void {
+        $this->reviewRequestAction(false);
+    }
+
     private function requestFormWithError(string $error): void {
         $clubs = $this->clubModel->getUnowned();
         $requests = $this->requestModel->getUserRequests((int)Auth::id());
@@ -79,5 +108,29 @@ class OwnershipController extends Controller {
             unset($_SESSION['auth_token']);
             Auth::login($userId);
         }
+    }
+
+    private function reviewRequestAction(bool $approve): void {
+        $this->requireAuth();
+
+        $requestId = (int)($_POST['request_id'] ?? 0);
+        if ($requestId <= 0) {
+            $this->redirect('/ownership/manage');
+        }
+
+        $ok = $approve
+            ? $this->requestModel->approve($requestId, (int)Auth::id(), Auth::isAdmin())
+            : $this->requestModel->reject($requestId, (int)Auth::id(), Auth::isAdmin());
+
+        $pending = Auth::isAdmin()
+            ? $this->requestModel->getPendingForAdmin()
+            : $this->requestModel->getPendingForOwner((int)Auth::id());
+
+        $this->view('ownership/manage', [
+            'pending' => $pending,
+            'can_admin_override' => Auth::isAdmin(),
+            'success' => $ok ? 'عملیات با موفقیت انجام شد.' : null,
+            'error' => $ok ? null : 'اجازه یا وضعیت مناسب برای این عملیات وجود ندارد.'
+        ]);
     }
 }

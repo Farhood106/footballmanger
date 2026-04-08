@@ -62,6 +62,9 @@ $router->get('/competition/{id}/fixtures', 'CompetitionController@fixtures');
 // Ownership requests
 $router->get('/ownership/request', 'OwnershipController@requestForm');
 $router->post('/ownership/request', 'OwnershipController@submitRequest');
+$router->get('/ownership/manage', 'OwnershipController@manageRequests');
+$router->post('/ownership/approve', 'OwnershipController@approveRequest');
+$router->post('/ownership/reject', 'OwnershipController@rejectRequest');
 
 // Admin
 $router->get('/admin', 'AdminController@index');

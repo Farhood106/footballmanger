@@ -48,7 +48,8 @@ class AdminController extends Controller {
         }
 
         try {
-            $columns = $this->getTableColumns('clubs');
+            $meta = $this->getTableColumnMeta('clubs');
+            $columns = array_keys($meta);
             $payload = [];
 
             $this->setIfColumnExists($payload, $columns, 'name', $name);
@@ -68,6 +69,7 @@ class AdminController extends Controller {
                 return;
             }
 
+            $this->applyNotNullDefaults($payload, $meta);
             $this->db->insert('clubs', $payload);
         } catch (Throwable $e) {
             $this->view('admin/create-club', ['error' => 'خطا در ثبت باشگاه: ' . $e->getMessage()]);
@@ -103,7 +105,8 @@ class AdminController extends Controller {
         }
 
         try {
-            $columns = $this->getTableColumns('players');
+            $meta = $this->getTableColumnMeta('players');
+            $columns = array_keys($meta);
             $payload = [];
 
             $this->setIfColumnExists($payload, $columns, 'club_id', $clubId);
@@ -126,6 +129,7 @@ class AdminController extends Controller {
             $this->setIfColumnExists($payload, $columns, 'wage', (int)($_POST['wage'] ?? 0));
             $this->setIfColumnExists($payload, $columns, 'market_value', (int)($_POST['market_value'] ?? 0));
 
+            $this->applyNotNullDefaults($payload, $meta);
             $this->db->insert('players', $payload);
         } catch (Throwable $e) {
             $clubs = $this->clubModel->findAll([], 'name ASC');
@@ -145,9 +149,47 @@ class AdminController extends Controller {
         return array_map(fn($r) => $r['Field'], $rows);
     }
 
+    private function getTableColumnMeta(string $table): array {
+        $rows = $this->db->fetchAll("SHOW COLUMNS FROM `{$table}`");
+        $meta = [];
+        foreach ($rows as $row) {
+            $meta[$row['Field']] = $row;
+        }
+        return $meta;
+    }
+
     private function setIfColumnExists(array &$payload, array $columns, string $column, mixed $value): void {
         if (in_array($column, $columns, true)) {
             $payload[$column] = $value;
+        }
+    }
+
+    private function applyNotNullDefaults(array &$payload, array $meta): void {
+        foreach ($meta as $field => $info) {
+            $isMissing = !array_key_exists($field, $payload);
+            $isNotNull = strtoupper((string)$info['Null']) === 'NO';
+            $hasDefault = $info['Default'] !== null;
+            $isAuto = stripos((string)$info['Extra'], 'auto_increment') !== false;
+
+            if (!$isMissing || !$isNotNull || $hasDefault || $isAuto) {
+                continue;
+            }
+
+            $type = strtolower((string)$info['Type']);
+            if (str_starts_with($type, 'int') || str_starts_with($type, 'bigint')) {
+                $payload[$field] = 0;
+            } elseif (str_starts_with($type, 'decimal') || str_starts_with($type, 'float') || str_starts_with($type, 'double')) {
+                $payload[$field] = 0;
+            } elseif (str_starts_with($type, 'date')) {
+                $payload[$field] = date('Y-m-d');
+            } elseif (str_starts_with($type, 'datetime') || str_starts_with($type, 'timestamp')) {
+                $payload[$field] = date('Y-m-d H:i:s');
+            } elseif (str_starts_with($type, 'enum(')) {
+                preg_match_all("/'([^']+)'/", $type, $matches);
+                $payload[$field] = $matches[1][0] ?? '';
+            } else {
+                $payload[$field] = '-';
+            }
         }
     }
 }
