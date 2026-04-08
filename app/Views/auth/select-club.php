@@ -6,14 +6,19 @@
     
     <div class="grid" style="margin-top: 30px;">
         <?php foreach ($clubs as $club): ?>
+        <?php
+            $leagueLabel = $club['league'] ?? ($club['country'] ?? 'نامشخص');
+            $budgetValue = $club['budget'] ?? ($club['balance'] ?? 0);
+            $reputation = (int)($club['reputation'] ?? 50);
+        ?>
         <div class="card">
-            <h3><?= htmlspecialchars($club['name']) ?></h3>
-            <p><strong>لیگ:</strong> <?= htmlspecialchars($club['league']) ?></p>
-            <p><strong>بودجه:</strong> $<?= number_format($club['budget']) ?></p>
-            <p><strong>شهرت:</strong> <?= $club['reputation'] ?>/100</p>
+            <h3><?= htmlspecialchars((string)($club['name'] ?? 'باشگاه بدون نام')) ?></h3>
+            <p><strong>لیگ/کشور:</strong> <?= htmlspecialchars((string)$leagueLabel) ?></p>
+            <p><strong>بودجه:</strong> $<?= number_format((float)$budgetValue) ?></p>
+            <p><strong>شهرت:</strong> <?= $reputation ?>/100</p>
             
             <form method="POST" action="/club/assign" data-ajax style="margin-top: 15px;">
-                <input type="hidden" name="club_id" value="<?= $club['id'] ?>">
+                <input type="hidden" name="club_id" value="<?= (int)($club['id'] ?? 0) ?>">
                 <button type="submit" class="btn btn-success" style="width: 100%;">انتخاب این باشگاه</button>
             </form>
         </div>
