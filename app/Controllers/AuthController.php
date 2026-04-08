@@ -112,42 +112,13 @@ class AuthController extends Controller {
         if (!Auth::check()) {
             $this->redirect('/login');
         }
-
-        $userClub = $this->userModel->getClub(Auth::id());
-        if ($userClub) {
-            $this->redirect('/dashboard');
-        }
-
-        $availableClubs = $this->clubModel->getUnmanaged();
-        $this->view('auth/select-club', ['clubs' => $availableClubs]);
+        $this->redirect('/manager/apply');
     }
 
     public function assignClub(): void {
         if (!Auth::check()) {
             $this->redirect('/login');
         }
-
-        $clubId = (int)($_POST['club_id'] ?? 0);
-        if (!$clubId) {
-            $availableClubs = $this->clubModel->getUnmanaged();
-            $this->view('auth/select-club', [
-                'clubs' => $availableClubs,
-                'error' => 'باشگاه انتخاب نشده است'
-            ]);
-            return;
-        }
-
-        $club = $this->clubModel->find($clubId);
-        if (!$club || !empty($club['manager_user_id'])) {
-            $availableClubs = $this->clubModel->getUnmanaged();
-            $this->view('auth/select-club', [
-                'clubs' => $availableClubs,
-                'error' => 'این باشگاه در دسترس نیست'
-            ]);
-            return;
-        }
-
-        $this->clubModel->assignManager($clubId, Auth::id());
-        $this->redirect('/dashboard');
+        $this->redirect('/manager/apply');
     }
 }

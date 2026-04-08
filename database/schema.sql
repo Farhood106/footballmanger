@@ -72,6 +72,41 @@ CREATE TABLE club_ownership_requests (
     UNIQUE KEY unique_pending_request (user_id, club_id, status)
 ) ENGINE=InnoDB;
 
+-- Manager Expectations
+CREATE TABLE club_manager_expectations (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    club_id INT NOT NULL,
+    owner_user_id INT,
+    title VARCHAR(255) NOT NULL,
+    expectations TEXT,
+    duties TEXT,
+    commitments TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_club_expectation (club_id),
+    FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
+    FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+-- Manager Applications
+CREATE TABLE club_manager_applications (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    club_id INT NOT NULL,
+    coach_user_id INT NOT NULL,
+    proposed_expectations TEXT,
+    proposed_duties TEXT,
+    proposed_commitments TEXT,
+    cover_letter TEXT,
+    status ENUM('PENDING','APPROVED','REJECTED','CANCELLED') DEFAULT 'PENDING',
+    reviewed_by INT,
+    reviewed_at DATETIME,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
+    FOREIGN KEY (coach_user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL,
+    UNIQUE KEY unique_pending_coach_club (club_id, coach_user_id, status)
+) ENGINE=InnoDB;
+
 -- Players
 CREATE TABLE players (
     id INT AUTO_INCREMENT PRIMARY KEY,

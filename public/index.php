@@ -66,6 +66,15 @@ $router->get('/ownership/manage', 'OwnershipController@manageRequests');
 $router->post('/ownership/approve', 'OwnershipController@approveRequest');
 $router->post('/ownership/reject', 'OwnershipController@rejectRequest');
 
+// Manager hiring workflow
+$router->get('/manager/expectations', 'ManagerHiringController@expectations');
+$router->post('/manager/expectations/save', 'ManagerHiringController@saveExpectations');
+$router->get('/manager/apply', 'ManagerHiringController@myApplications');
+$router->post('/manager/apply/submit', 'ManagerHiringController@submitApplication');
+$router->get('/manager/applications/manage', 'ManagerHiringController@manageApplications');
+$router->post('/manager/applications/approve', 'ManagerHiringController@approveApplication');
+$router->post('/manager/applications/reject', 'ManagerHiringController@rejectApplication');
+
 // Admin
 $router->get('/admin', 'AdminController@index');
 $router->get('/admin/clubs/create', 'AdminController@createClubForm');

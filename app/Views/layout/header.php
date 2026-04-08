@@ -51,6 +51,11 @@
                 <?php if (in_array(Auth::gameRole(), ['COACH', 'OWNER'], true)): ?>
                     <a href="/ownership/request">مالکیت باشگاه</a>
                 <?php endif; ?>
+                <a href="/manager/apply">درخواست مربیگری</a>
+                <?php if (Auth::isAdmin() || Auth::gameRole() === 'OWNER'): ?>
+                    <a href="/manager/expectations">تعریف شرح وظایف مربی</a>
+                    <a href="/manager/applications/manage">بررسی درخواست مربیگری</a>
+                <?php endif; ?>
                 <?php if (Auth::isAdmin() || Auth::gameRole() === 'OWNER'): ?>
                     <a href="/ownership/manage">بررسی درخواست‌ها</a>
                 <?php endif; ?>
