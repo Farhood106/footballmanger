@@ -87,7 +87,7 @@ class AuthController extends Controller {
             'username' => $username,
             'email'    => $email,
             'password' => $password,
-            'role'     => 'MANAGER',
+            'role'     => 'manager',
             'game_role'=> $accountType === 'OWNER' ? 'OWNER' : 'COACH'
         ]);
 

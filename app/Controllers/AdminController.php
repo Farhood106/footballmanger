@@ -48,17 +48,27 @@ class AdminController extends Controller {
         }
 
         try {
-            $this->db->insert('clubs', [
-                'name' => $name,
-                'short_name' => strtoupper($shortName),
-                'country' => $country,
-                'city' => $city,
-                'founded' => $founded,
-                'stadium_name' => $stadiumName,
-                'stadium_capacity' => $stadiumCapacity,
-                'reputation' => (int)($_POST['reputation'] ?? 50),
-                'balance' => (int)($_POST['balance'] ?? 10000000),
-            ]);
+            $columns = $this->getTableColumns('clubs');
+            $payload = [];
+
+            $this->setIfColumnExists($payload, $columns, 'name', $name);
+            $this->setIfColumnExists($payload, $columns, 'short_name', strtoupper($shortName));
+            $this->setIfColumnExists($payload, $columns, 'country', $country);
+            $this->setIfColumnExists($payload, $columns, 'city', $city);
+            $this->setIfColumnExists($payload, $columns, 'founded', $founded);
+            $this->setIfColumnExists($payload, $columns, 'founded_year', $founded);
+            $this->setIfColumnExists($payload, $columns, 'stadium_name', $stadiumName);
+            $this->setIfColumnExists($payload, $columns, 'stadium_capacity', $stadiumCapacity);
+            $this->setIfColumnExists($payload, $columns, 'reputation', (int)($_POST['reputation'] ?? 50));
+            $this->setIfColumnExists($payload, $columns, 'balance', (int)($_POST['balance'] ?? 10000000));
+            $this->setIfColumnExists($payload, $columns, 'budget', (int)($_POST['balance'] ?? 10000000));
+
+            if (empty($payload)) {
+                $this->view('admin/create-club', ['error' => 'ستون‌های مورد نیاز برای ثبت باشگاه در دیتابیس پیدا نشد.']);
+                return;
+            }
+
+            $this->db->insert('clubs', $payload);
         } catch (Throwable $e) {
             $this->view('admin/create-club', ['error' => 'خطا در ثبت باشگاه: ' . $e->getMessage()]);
             return;
@@ -93,25 +103,30 @@ class AdminController extends Controller {
         }
 
         try {
-            $this->db->insert('players', [
-                'club_id' => $clubId,
-                'first_name' => $firstName,
-                'last_name' => $lastName,
-                'nationality' => trim($_POST['nationality'] ?? 'Iran'),
-                'birth_date' => $_POST['birth_date'] ?? '2000-01-01',
-                'position' => $_POST['position'] ?? 'CM',
-                'preferred_foot' => $_POST['preferred_foot'] ?? 'RIGHT',
-                'pace' => (int)($_POST['pace'] ?? 60),
-                'shooting' => (int)($_POST['shooting'] ?? 60),
-                'passing' => (int)($_POST['passing'] ?? 60),
-                'dribbling' => (int)($_POST['dribbling'] ?? 60),
-                'defending' => (int)($_POST['defending'] ?? 60),
-                'physical' => (int)($_POST['physical'] ?? 60),
-                'overall' => (int)($_POST['overall'] ?? 60),
-                'potential' => (int)($_POST['potential'] ?? 75),
-                'wage' => (int)($_POST['wage'] ?? 0),
-                'market_value' => (int)($_POST['market_value'] ?? 0),
-            ]);
+            $columns = $this->getTableColumns('players');
+            $payload = [];
+
+            $this->setIfColumnExists($payload, $columns, 'club_id', $clubId);
+            $this->setIfColumnExists($payload, $columns, 'first_name', $firstName);
+            $this->setIfColumnExists($payload, $columns, 'last_name', $lastName);
+            $this->setIfColumnExists($payload, $columns, 'name', $firstName . ' ' . $lastName);
+            $this->setIfColumnExists($payload, $columns, 'nationality', trim($_POST['nationality'] ?? 'Iran'));
+            $this->setIfColumnExists($payload, $columns, 'birth_date', $_POST['birth_date'] ?? '2000-01-01');
+            $this->setIfColumnExists($payload, $columns, 'position', $_POST['position'] ?? 'CM');
+            $this->setIfColumnExists($payload, $columns, 'preferred_foot', $_POST['preferred_foot'] ?? 'RIGHT');
+            $this->setIfColumnExists($payload, $columns, 'pace', (int)($_POST['pace'] ?? 60));
+            $this->setIfColumnExists($payload, $columns, 'shooting', (int)($_POST['shooting'] ?? 60));
+            $this->setIfColumnExists($payload, $columns, 'passing', (int)($_POST['passing'] ?? 60));
+            $this->setIfColumnExists($payload, $columns, 'dribbling', (int)($_POST['dribbling'] ?? 60));
+            $this->setIfColumnExists($payload, $columns, 'defending', (int)($_POST['defending'] ?? 60));
+            $this->setIfColumnExists($payload, $columns, 'physical', (int)($_POST['physical'] ?? 60));
+            $this->setIfColumnExists($payload, $columns, 'overall', (int)($_POST['overall'] ?? 60));
+            $this->setIfColumnExists($payload, $columns, 'overall_rating', (int)($_POST['overall'] ?? 60));
+            $this->setIfColumnExists($payload, $columns, 'potential', (int)($_POST['potential'] ?? 75));
+            $this->setIfColumnExists($payload, $columns, 'wage', (int)($_POST['wage'] ?? 0));
+            $this->setIfColumnExists($payload, $columns, 'market_value', (int)($_POST['market_value'] ?? 0));
+
+            $this->db->insert('players', $payload);
         } catch (Throwable $e) {
             $clubs = $this->clubModel->findAll([], 'name ASC');
             $this->view('admin/create-player', [
@@ -123,5 +138,16 @@ class AdminController extends Controller {
 
         $clubs = $this->clubModel->findAll([], 'name ASC');
         $this->view('admin/create-player', ['clubs' => $clubs, 'success' => 'بازیکن با موفقیت ایجاد شد.']);
+    }
+
+    private function getTableColumns(string $table): array {
+        $rows = $this->db->fetchAll("SHOW COLUMNS FROM `{$table}`");
+        return array_map(fn($r) => $r['Field'], $rows);
+    }
+
+    private function setIfColumnExists(array &$payload, array $columns, string $column, mixed $value): void {
+        if (in_array($column, $columns, true)) {
+            $payload[$column] = $value;
+        }
     }
 }

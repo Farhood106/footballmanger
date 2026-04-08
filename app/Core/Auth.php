@@ -93,12 +93,12 @@ class Auth {
 
     public static function isAdmin(): bool {
         $user = self::user();
-        return isset($user['role']) && $user['role'] === 'ADMIN';
+        return isset($user['role']) && strtoupper((string)$user['role']) === 'ADMIN';
     }
 
     public static function gameRole(): string {
         $user = self::user();
-        return $user['game_role'] ?? 'COACH';
+        return strtoupper((string)($user['game_role'] ?? 'COACH'));
     }
 
     public static function login(int $userId): void {

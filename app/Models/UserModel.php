@@ -21,7 +21,7 @@ class UserModel extends BaseModel {
             'username'      => $data['username'],
             'email'         => $data['email'],
             'password_hash' => password_hash($data['password'], PASSWORD_BCRYPT),
-            'role'          => $data['role'] ?? 'MANAGER',
+            'role'          => $data['role'] ?? 'manager',
             'game_role'     => $data['game_role'] ?? 'COACH',
             'created_at'    => date('Y-m-d H:i:s')
         ]);

@@ -14,10 +14,6 @@ class OwnershipController extends Controller {
     public function requestForm(): void {
         $this->requireAuth();
 
-        if (Auth::gameRole() !== 'OWNER') {
-            $this->redirect('/dashboard');
-        }
-
         $clubs = $this->clubModel->getUnowned();
         $requests = $this->requestModel->getUserRequests((int)Auth::id());
 
@@ -29,10 +25,6 @@ class OwnershipController extends Controller {
 
     public function submitRequest(): void {
         $this->requireAuth();
-
-        if (Auth::gameRole() !== 'OWNER') {
-            $this->redirect('/dashboard');
-        }
 
         $clubId = (int)($_POST['club_id'] ?? 0);
         $offer = (int)($_POST['offer_amount'] ?? 0);
@@ -56,6 +48,7 @@ class OwnershipController extends Controller {
         }
 
         $this->requestModel->createRequest($userId, $clubId, $offer, $message);
+        $this->promoteCoachToOwner($userId);
 
         $clubs = $this->clubModel->getUnowned();
         $requests = $this->requestModel->getUserRequests($userId);
@@ -75,5 +68,16 @@ class OwnershipController extends Controller {
             'requests' => $requests,
             'error' => $error
         ]);
+    }
+
+    private function promoteCoachToOwner(int $userId): void {
+        if (Auth::gameRole() === 'COACH') {
+            Database::getInstance()->execute(
+                "UPDATE users SET game_role = 'OWNER' WHERE id = ?",
+                [$userId]
+            );
+            unset($_SESSION['auth_token']);
+            Auth::login($userId);
+        }
     }
 }
