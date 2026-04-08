@@ -48,6 +48,7 @@ class AdminController extends Controller {
         }
 
         try {
+            $this->ensureUtf8ForTable('clubs');
             $meta = $this->getTableColumnMeta('clubs');
             $columns = array_keys($meta);
             $payload = [];
@@ -105,6 +106,7 @@ class AdminController extends Controller {
         }
 
         try {
+            $this->ensureUtf8ForTable('players');
             $meta = $this->getTableColumnMeta('players');
             $columns = array_keys($meta);
             $payload = [];
@@ -212,6 +214,16 @@ class AdminController extends Controller {
             return (int)($row['id'] ?? 1);
         } catch (Throwable $e) {
             return 1;
+        }
+    }
+
+    private function ensureUtf8ForTable(string $table): void {
+        try {
+            $this->db->execute(
+                "ALTER TABLE `{$table}` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+            );
+        } catch (Throwable $e) {
+            // اگر دسترسی ALTER یا تغییر charset ممکن نبود، ادامه می‌دهیم
         }
     }
 }
