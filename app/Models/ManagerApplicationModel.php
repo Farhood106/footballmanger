@@ -41,6 +41,9 @@ class ManagerApplicationModel extends BaseModel {
                 UNIQUE KEY unique_pending_coach_club (club_id, coach_user_id, status)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
         );
+
+        $this->ensureUtf8ForTable('club_manager_expectations');
+        $this->ensureUtf8ForTable('club_manager_applications');
     }
 
     public function upsertExpectation(int $clubId, int $ownerUserId, string $title, string $expectations, string $duties, string $commitments): void {
@@ -183,5 +186,15 @@ class ManagerApplicationModel extends BaseModel {
              WHERE id = ?",
             [$reviewerId, $applicationId]
         ) > 0;
+    }
+
+    private function ensureUtf8ForTable(string $table): void {
+        try {
+            $this->db->execute(
+                "ALTER TABLE `{$table}` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+            );
+        } catch (Throwable $e) {
+            // اگر دسترسی ALTER وجود نداشت، از جدول موجود استفاده می‌کنیم
+        }
     }
 }
