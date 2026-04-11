@@ -170,4 +170,23 @@
     </table>
 </div>
 
+
+<div class="card">
+    <h3>Club Control States</h3>
+    <table class="table">
+        <thead><tr><th>Club</th><th>Owner</th><th>Manager</th><th>Control State</th></tr></thead>
+        <tbody>
+        <?php foreach (($control_states ?? []) as $state): ?>
+            <tr>
+                <td><?= htmlspecialchars((string)$state['name']) ?></td>
+                <td><?= htmlspecialchars((string)($state['owner_name'] ?? 'AI/System')) ?></td>
+                <td><?= htmlspecialchars((string)($state['manager_name'] ?? 'AI/System')) ?></td>
+                <td><?= htmlspecialchars((string)$state['key']) ?></td>
+            </tr>
+        <?php endforeach; ?>
+        <?php if (empty($control_states)): ?><tr><td colspan="4">No clubs found.</td></tr><?php endif; ?>
+        </tbody>
+    </table>
+</div>
+
 <?php require __DIR__ . '/../layout/footer.php'; ?>

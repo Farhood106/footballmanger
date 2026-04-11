@@ -4,11 +4,13 @@
 class DailyCycleOrchestrator {
     private Database $db;
     private MatchEngine $engine;
+    private AIClubManagementService $aiClubManager;
     private array $phases;
 
     public function __construct(?MatchEngine $engine = null, ?array $config = null, ?Database $db = null) {
         $this->db = $db ?? Database::getInstance();
         $this->engine = $engine ?? new MatchEngine();
+        $this->aiClubManager = new AIClubManagementService($this->db);
         $allConfig = $config ?? require __DIR__ . '/../../config/config.php';
         $this->phases = $allConfig['game']['daily_cycle']['phases'];
     }
@@ -37,16 +39,21 @@ class DailyCycleOrchestrator {
             'skipped' => [],
             'locks' => [],
             'club_states' => [],
+            'ai_preparation' => [],
         ];
 
         foreach ($states as $state) {
             $profile = self::profileKey((int)$state['matches_today']);
             $current = $this->advanceClubPhase($state, $worldPhase['key'] ?? null, $profile);
+            $clubId = (int)$state['club_id'];
             $result['club_states'][] = [
-                'club_id' => (int)$state['club_id'],
+                'club_id' => $clubId,
                 'matches_today' => (int)$state['matches_today'],
                 'phase' => $current,
             ];
+
+            $prep = $this->aiClubManager->applyDailyPreparation($clubId, $cycleDate);
+            $result['ai_preparation'][] = ['club_id' => $clubId, 'mode' => $prep['mode'] ?? 'none'];
         }
 
         foreach ($scheduled as $match) {
@@ -210,7 +217,23 @@ class DailyCycleOrchestrator {
 
             $validation = self::validateLineupRows($rows);
             if (!$validation['ok']) {
-                throw new RuntimeException('Invalid lineup for club ' . $clubId . ': ' . $validation['reason']);
+                $aiFix = $this->aiClubManager->ensureLineupForMatchPhase($clubId, $lineupPhase);
+                if (!($aiFix['ok'] ?? false)) {
+                    throw new RuntimeException('Invalid lineup for club ' . $clubId . ': ' . $validation['reason']);
+                }
+
+                $rows = $this->db->fetchAll(
+                    "SELECT tl.player_id, tl.position_slot, p.position AS actual_position
+                     FROM tactic_lineups tl
+                     JOIN players p ON p.id = tl.player_id
+                     WHERE tl.club_id = ? AND tl.phase_key IN (?, 'MATCH_1') AND tl.is_active = 1
+                     ORDER BY CASE WHEN tl.phase_key = ? THEN 0 ELSE 1 END, tl.position_slot",
+                    [$clubId, $lineupPhase, $lineupPhase]
+                );
+                $validation = self::validateLineupRows($rows);
+                if (!$validation['ok']) {
+                    throw new RuntimeException('Invalid lineup for club ' . $clubId . ': ' . $validation['reason']);
+                }
             }
 
             $seen = [];

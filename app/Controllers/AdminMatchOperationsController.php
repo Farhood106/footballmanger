@@ -4,11 +4,13 @@
 class AdminMatchOperationsController extends Controller {
     private Database $db;
     private AdminMatchOperationsService $service;
+    private AIClubManagementService $aiClubManager;
 
     public function __construct() {
         parent::__construct();
         $this->db = Database::getInstance();
         $this->service = new AdminMatchOperationsService();
+        $this->aiClubManager = new AIClubManagementService($this->db);
     }
 
     public function index(): void {
@@ -35,6 +37,7 @@ class AdminMatchOperationsController extends Controller {
             'cycle_states' => $this->service->getCycleStates($cycleDate),
             'success' => !empty($_GET['success']) ? trim((string)$_GET['success']) : null,
             'error' => !empty($_GET['error']) ? trim((string)$_GET['error']) : null,
+            'control_states' => $this->aiClubManager->listClubControlStates(),
         ]);
     }
 
