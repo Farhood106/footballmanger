@@ -90,9 +90,16 @@ class ClubModel extends BaseModel {
     }
 
     public function updateBudget(int $clubId, float $amount): bool {
-        return $this->db->execute(
-            "UPDATE clubs SET balance = balance + ? WHERE id = ?",
-            [$amount, $clubId]
-        ) > 0;
+        $finance = new FinanceService($this->db);
+        $result = $finance->postEntry(
+            $clubId,
+            'MANUAL_ADMIN_ADJUSTMENT',
+            (int)$amount,
+            'Budget update via ClubModel::updateBudget',
+            null,
+            'CLUB_BUDGET_UPDATE',
+            abs(crc32((string)$clubId . '|' . (string)$amount . '|' . date('Y-m-d H:i:s')))
+        );
+        return !empty($result['ok']);
     }
 }

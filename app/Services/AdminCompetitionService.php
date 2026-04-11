@@ -433,13 +433,19 @@ class AdminCompetitionService {
 
             if (!empty($plan['promoted'])) {
                 foreach ($plan['promoted'] as $club) {
-                    $finance->postSeasonReward((int)$club['club_id'], $seasonId, 250000, 'Promotion reward');
+                    $posted = $finance->postSeasonReward((int)$club['club_id'], $seasonId, 250000, 'Promotion reward', 'PROMOTION');
+                    if (empty($posted['ok'])) {
+                        throw new RuntimeException($posted['error'] ?? 'Failed to post promotion reward.');
+                    }
                 }
             }
             if (!empty($plan['direct'])) {
                 $champion = $plan['direct'][0] ?? null;
                 if ($champion) {
-                    $finance->postSeasonReward((int)$champion['club_id'], $seasonId, 500000, 'Title reward');
+                    $posted = $finance->postSeasonReward((int)$champion['club_id'], $seasonId, 500000, 'Title reward', 'TITLE');
+                    if (empty($posted['ok'])) {
+                        throw new RuntimeException($posted['error'] ?? 'Failed to post title reward.');
+                    }
                 }
             }
 

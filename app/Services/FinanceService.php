@@ -40,8 +40,10 @@ class FinanceService {
             return ['ok' => false, 'error' => 'Unsupported finance entry type.'];
         }
 
-        if ($manageTransaction) {
+        $startedTx = false;
+        if ($manageTransaction && !$this->db->inTransaction()) {
             $this->db->beginTransaction();
+            $startedTx = true;
         }
         try {
             if ($referenceType !== null && $referenceId !== null) {
@@ -52,7 +54,7 @@ class FinanceService {
                     [$clubId, $entryType, $referenceType, $referenceId]
                 );
                 if ($dup) {
-                    if ($manageTransaction) {
+                    if ($startedTx) {
                         $this->db->rollBack();
                     }
                     return ['ok' => false, 'error' => 'Duplicate finance posting blocked.'];
@@ -71,12 +73,12 @@ class FinanceService {
                 'meta_json' => empty($meta) ? null : json_encode($meta, JSON_UNESCAPED_UNICODE),
             ]);
 
-            if ($manageTransaction) {
+            if ($startedTx) {
                 $this->db->commit();
             }
             return ['ok' => true];
         } catch (Throwable $e) {
-            if ($manageTransaction) {
+            if ($startedTx) {
                 $this->db->rollBack();
             }
             return ['ok' => false, 'error' => $e->getMessage()];
@@ -119,6 +121,7 @@ class FinanceService {
         if ($amount <= 0) {
             return ['ok' => false, 'error' => 'Funding amount must be positive.'];
         }
+        $externalRef = trim((string)$externalRef) ?: null;
 
         $club = $this->db->fetchOne("SELECT owner_user_id FROM clubs WHERE id = ?", [$clubId]);
         if (!$club) return ['ok' => false, 'error' => 'Club not found.'];
@@ -126,12 +129,24 @@ class FinanceService {
             return ['ok' => false, 'error' => 'Only club owner can fund this club.'];
         }
 
+        if ($externalRef !== null) {
+            $dup = $this->db->fetchOne(
+                "SELECT id FROM club_owner_funding_events
+                 WHERE club_id = ? AND external_reference = ? AND status = 'posted'
+                 LIMIT 1",
+                [$clubId, $externalRef]
+            );
+            if ($dup) {
+                return ['ok' => false, 'error' => 'Funding reference already posted.'];
+            }
+        }
+
         $eventId = (int)$this->db->insert('club_owner_funding_events', [
             'club_id' => $clubId,
             'owner_user_id' => $ownerUserId,
             'amount' => $amount,
             'note' => trim($note) ?: null,
-            'external_reference' => trim((string)$externalRef) ?: null,
+            'external_reference' => $externalRef,
             'status' => 'posted',
         ]);
 
@@ -152,21 +167,27 @@ class FinanceService {
         $sponsor = $this->db->fetchOne("SELECT * FROM club_sponsors WHERE id = ? AND club_id = ?", [$sponsorId, $clubId]);
         if (!$sponsor) return ['ok' => false, 'error' => 'Sponsor not found for club.'];
 
+        $normalizedNote = trim($note);
+        $logicalKey = (string)$clubId . '|' . (string)$sponsorId . '|' . (string)$amount . '|' . mb_strtolower($normalizedNote) . '|' . date('Y-m-d');
+        $referenceId = abs(crc32($logicalKey));
+
         return $this->postEntry(
             $clubId,
             'SPONSOR_INCOME',
             $amount,
-            trim($note) ?: ('Sponsor income: ' . ($sponsor['brand_name'] ?? 'sponsor')),
+            $normalizedNote !== '' ? $normalizedNote : ('Sponsor income: ' . ($sponsor['brand_name'] ?? 'sponsor')),
             null,
-            'SPONSOR',
-            $sponsorId,
-            ['tier' => $sponsor['tier'] ?? 'minor']
+            'SPONSOR_INCOME_DAILY',
+            $referenceId,
+            ['tier' => $sponsor['tier'] ?? 'minor', 'sponsor_id' => $sponsorId, 'logical_key' => $logicalKey]
         );
     }
 
-    public function postSeasonReward(int $clubId, int $seasonId, int $amount, string $reason): array {
+    public function postSeasonReward(int $clubId, int $seasonId, int $amount, string $reason, string $rewardKey = 'GENERAL'): array {
         if ($amount <= 0) return ['ok' => false, 'error' => 'Reward amount must be positive.'];
-        return $this->postEntry($clubId, 'SEASON_REWARD', $amount, $reason, $seasonId, 'SEASON', $seasonId);
+        $normalizedKey = strtoupper(trim($rewardKey)) ?: 'GENERAL';
+        $referenceId = abs(crc32((string)$seasonId . '|' . (string)$clubId . '|' . $normalizedKey));
+        return $this->postEntry($clubId, 'SEASON_REWARD', $amount, $reason, $seasonId, 'SEASON_REWARD', $referenceId, ['reward_key' => $normalizedKey]);
     }
 
     public function getLedgerByClub(int $clubId, int $limit = 200): array {
