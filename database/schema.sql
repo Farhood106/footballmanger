@@ -97,13 +97,14 @@ CREATE TABLE club_manager_applications (
     proposed_duties TEXT,
     proposed_commitments TEXT,
     cover_letter TEXT,
-    status ENUM('PENDING','APPROVED','REJECTED','CANCELLED') DEFAULT 'PENDING',
-    reviewed_by INT,
+    status ENUM('pending','approved','rejected') DEFAULT 'pending',
+    rejection_reason VARCHAR(1000),
+    reviewed_by_user_id INT,
     reviewed_at DATETIME,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
     FOREIGN KEY (coach_user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (reviewed_by_user_id) REFERENCES users(id) ON DELETE SET NULL,
     UNIQUE KEY unique_pending_coach_club (club_id, coach_user_id, status)
 ) ENGINE=InnoDB;
 

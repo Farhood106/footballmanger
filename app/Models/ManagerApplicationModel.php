@@ -34,13 +34,18 @@ class ManagerApplicationModel extends BaseModel {
                 proposed_duties TEXT,
                 proposed_commitments TEXT,
                 cover_letter TEXT,
-                status ENUM('PENDING','APPROVED','REJECTED','CANCELLED') DEFAULT 'PENDING',
-                reviewed_by INT,
+                status ENUM('pending','approved','rejected') DEFAULT 'pending',
+                rejection_reason VARCHAR(1000),
+                reviewed_by_user_id INT,
                 reviewed_at DATETIME,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE KEY unique_pending_coach_club (club_id, coach_user_id, status)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
         );
+
+        $this->ensureColumnExists('club_manager_applications', 'rejection_reason', "VARCHAR(1000) NULL AFTER status");
+        $this->renameColumnIfExists('club_manager_applications', 'reviewed_by', 'reviewed_by_user_id', 'INT NULL');
+        $this->db->execute("UPDATE club_manager_applications SET status = LOWER(status)");
 
         $this->ensureUtf8ForTable('club_manager_expectations');
         $this->ensureUtf8ForTable('club_manager_applications');
@@ -76,7 +81,7 @@ class ManagerApplicationModel extends BaseModel {
     public function hasPendingApplication(int $clubId, int $coachUserId): bool {
         $row = $this->db->fetchOne(
             "SELECT id FROM club_manager_applications
-             WHERE club_id = ? AND coach_user_id = ? AND status = 'PENDING' LIMIT 1",
+             WHERE club_id = ? AND coach_user_id = ? AND LOWER(status) = 'pending' LIMIT 1",
             [$clubId, $coachUserId]
         );
 
@@ -98,8 +103,19 @@ class ManagerApplicationModel extends BaseModel {
             'proposed_duties' => $proposedDuties,
             'proposed_commitments' => $proposedCommitments,
             'cover_letter' => $coverLetter,
-            'status' => 'PENDING'
+            'status' => 'pending'
         ]);
+    }
+
+    public function getByCoach(int $coachUserId): array {
+        return $this->db->fetchAll(
+            "SELECT a.*, c.name AS club_name
+             FROM club_manager_applications a
+             JOIN clubs c ON a.club_id = c.id
+             WHERE a.coach_user_id = ?
+             ORDER BY a.created_at DESC",
+            [$coachUserId]
+        );
     }
 
     public function getPendingForReviewer(int $userId, bool $isAdmin): array {
@@ -109,7 +125,7 @@ class ManagerApplicationModel extends BaseModel {
                  FROM club_manager_applications a
                  JOIN clubs c ON a.club_id = c.id
                  JOIN users u ON a.coach_user_id = u.id
-                 WHERE a.status = 'PENDING'
+                 WHERE LOWER(a.status) = 'pending'
                  ORDER BY a.created_at ASC"
             );
         }
@@ -119,7 +135,7 @@ class ManagerApplicationModel extends BaseModel {
              FROM club_manager_applications a
              JOIN clubs c ON a.club_id = c.id
              JOIN users u ON a.coach_user_id = u.id
-             WHERE a.status = 'PENDING' AND c.owner_user_id = ?
+             WHERE LOWER(a.status) = 'pending' AND c.owner_user_id = ?
              ORDER BY a.created_at ASC",
             [$userId]
         );
@@ -133,7 +149,7 @@ class ManagerApplicationModel extends BaseModel {
             [$applicationId]
         );
 
-        if (!$app || $app['status'] !== 'PENDING') return false;
+        if (!$app || strtolower((string)$app['status']) !== 'pending') return false;
 
         $canReview = $isAdmin || ((int)$app['owner_user_id'] === $reviewerId);
         if (!$canReview) return false;
@@ -149,7 +165,6 @@ class ManagerApplicationModel extends BaseModel {
                 [$coachId, $coachId, $clubId]
             );
 
-            // close previous active contracts for club
             $this->db->execute(
                 "UPDATE manager_contracts SET status = 'TERMINATED', termination_reason = 'Replaced by new appointment', updated_at = NOW()
                  WHERE club_id = ? AND status = 'ACTIVE'",
@@ -171,16 +186,17 @@ class ManagerApplicationModel extends BaseModel {
 
             $this->db->execute(
                 "UPDATE club_manager_applications
-                 SET status = 'APPROVED', reviewed_by = ?, reviewed_at = NOW()
+                 SET status = 'approved', rejection_reason = NULL, reviewed_by_user_id = ?, reviewed_at = NOW()
                  WHERE id = ?",
                 [$reviewerId, $applicationId]
             );
 
             $this->db->execute(
                 "UPDATE club_manager_applications
-                 SET status = 'REJECTED', reviewed_by = ?, reviewed_at = NOW()
-                 WHERE club_id = ? AND status = 'PENDING' AND id <> ?",
-                [$reviewerId, (int)$app['club_id'], $applicationId]
+                 SET status = 'rejected', rejection_reason = 'Another candidate was selected for this role.',
+                     reviewed_by_user_id = ?, reviewed_at = NOW()
+                 WHERE club_id = ? AND LOWER(status) = 'pending' AND id <> ?",
+                [$reviewerId, $clubId, $applicationId]
             );
 
             $this->db->commit();
@@ -191,7 +207,7 @@ class ManagerApplicationModel extends BaseModel {
         }
     }
 
-    public function reject(int $applicationId, int $reviewerId, bool $isAdmin): bool {
+    public function reject(int $applicationId, int $reviewerId, bool $isAdmin, string $reason): bool {
         $app = $this->db->fetchOne(
             "SELECT a.*, c.owner_user_id FROM club_manager_applications a
              JOIN clubs c ON a.club_id = c.id
@@ -199,17 +215,46 @@ class ManagerApplicationModel extends BaseModel {
             [$applicationId]
         );
 
-        if (!$app || $app['status'] !== 'PENDING') return false;
+        if (!$app || strtolower((string)$app['status']) !== 'pending') return false;
 
         $canReview = $isAdmin || ((int)$app['owner_user_id'] === $reviewerId);
         if (!$canReview) return false;
 
         return $this->db->execute(
             "UPDATE club_manager_applications
-             SET status = 'REJECTED', reviewed_by = ?, reviewed_at = NOW()
+             SET status = 'rejected', rejection_reason = ?, reviewed_by_user_id = ?, reviewed_at = NOW()
              WHERE id = ?",
-            [$reviewerId, $applicationId]
+            [$reason, $reviewerId, $applicationId]
         ) > 0;
+    }
+
+    private function ensureColumnExists(string $table, string $column, string $definition): void {
+        $exists = $this->db->fetchOne(
+            "SELECT COLUMN_NAME FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?",
+            [$table, $column]
+        );
+
+        if (!$exists) {
+            $this->db->execute("ALTER TABLE `{$table}` ADD COLUMN `{$column}` {$definition}");
+        }
+    }
+
+    private function renameColumnIfExists(string $table, string $from, string $to, string $type): void {
+        $old = $this->db->fetchOne(
+            "SELECT COLUMN_NAME FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?",
+            [$table, $from]
+        );
+        $new = $this->db->fetchOne(
+            "SELECT COLUMN_NAME FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?",
+            [$table, $to]
+        );
+
+        if ($old && !$new) {
+            $this->db->execute("ALTER TABLE `{$table}` CHANGE COLUMN `{$from}` `{$to}` {$type}");
+        }
     }
 
     private function ensureUtf8ForTable(string $table): void {
@@ -218,7 +263,7 @@ class ManagerApplicationModel extends BaseModel {
                 "ALTER TABLE `{$table}` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
             );
         } catch (Throwable $e) {
-            // اگر دسترسی ALTER وجود نداشت، از جدول موجود استفاده می‌کنیم
+            // continue in restricted environments
         }
     }
 }

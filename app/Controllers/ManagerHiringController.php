@@ -75,8 +75,11 @@ class ManagerHiringController extends Controller {
             $club['expectation'] = $this->applicationModel->getExpectationByClub((int)$club['id']);
         }
 
+        $history = $this->applicationModel->getByCoach((int)Auth::id());
+
         $this->view('manager/apply', [
-            'clubs' => $clubs
+            'clubs' => $clubs,
+            'history' => $history
         ]);
     }
 
@@ -90,8 +93,14 @@ class ManagerHiringController extends Controller {
 
         $userId = (int)Auth::id();
         if ($this->applicationModel->hasPendingApplication($clubId, $userId)) {
+            $clubs = $this->clubModel->getUnmanaged();
+            foreach ($clubs as &$club) {
+                $club['expectation'] = $this->applicationModel->getExpectationByClub((int)$club['id']);
+            }
+
             $this->view('manager/apply', [
-                'clubs' => $this->clubModel->getUnmanaged(),
+                'clubs' => $clubs,
+                'history' => $this->applicationModel->getByCoach($userId),
                 'error' => 'برای این باشگاه قبلاً درخواست فعال ثبت کرده‌اید.'
             ]);
             return;
@@ -113,6 +122,7 @@ class ManagerHiringController extends Controller {
 
         $this->view('manager/apply', [
             'clubs' => $clubs,
+            'history' => $this->applicationModel->getByCoach($userId),
             'success' => 'درخواست مربیگری ثبت شد و در انتظار بررسی مالک/مدیر سایت است.'
         ]);
     }
@@ -143,9 +153,19 @@ class ManagerHiringController extends Controller {
             $this->redirect('/manager/applications/manage');
         }
 
+        $reason = trim((string)($_POST['rejection_reason'] ?? ''));
+
+        if (!$approve && $reason === '') {
+            $this->view('manager/manage-applications', [
+                'pending' => $this->applicationModel->getPendingForReviewer((int)Auth::id(), Auth::isAdmin()),
+                'error' => 'وارد کردن دلیل رد درخواست الزامی است.'
+            ]);
+            return;
+        }
+
         $ok = $approve
             ? $this->applicationModel->approve($id, (int)Auth::id(), Auth::isAdmin())
-            : $this->applicationModel->reject($id, (int)Auth::id(), Auth::isAdmin());
+            : $this->applicationModel->reject($id, (int)Auth::id(), Auth::isAdmin(), $reason);
 
         $this->view('manager/manage-applications', [
             'pending' => $this->applicationModel->getPendingForReviewer((int)Auth::id(), Auth::isAdmin()),

@@ -1,5 +1,12 @@
 <?php $title = 'ارسال درخواست مربیگری'; require __DIR__ . '/../layout/header.php'; ?>
 
+<style>
+.status-chip { display:inline-block; padding:4px 10px; border-radius:999px; font-size:12px; font-weight:600; }
+.status-pending { background:#fff7ed; color:#9a3412; }
+.status-approved { background:#ecfdf5; color:#166534; }
+.status-rejected { background:#fef2f2; color:#991b1b; }
+</style>
+
 <div class="card">
     <h2>درخواست پست مربیگری</h2>
     <p>ابتدا شرح همکاری تعریف‌شده توسط مالک را ببین و سپس نسخه پیشنهادی خودت را ارسال کن.</p>
@@ -65,5 +72,47 @@ $ownerCommitments = trim((string)($exp['commitments'] ?? ''));
     </form>
 </div>
 <?php endforeach; ?>
+
+<div class="card">
+    <h2>My Manager Applications</h2>
+    <?php if (empty($history)): ?>
+        <p>شما هنوز درخواست مربیگری ثبت نکرده‌اید.</p>
+    <?php else: ?>
+        <table class="table">
+            <thead>
+            <tr>
+                <th>باشگاه</th>
+                <th>تاریخ ارسال</th>
+                <th>وضعیت</th>
+                <th>جزئیات</th>
+            </tr>
+            </thead>
+            <tbody>
+            <?php foreach ($history as $application): ?>
+                <?php
+                $status = strtolower((string)($application['status'] ?? 'pending'));
+                $statusClass = 'status-pending';
+                $statusText = 'Pending';
+                if ($status === 'approved') { $statusClass = 'status-approved'; $statusText = 'Approved'; }
+                if ($status === 'rejected') { $statusClass = 'status-rejected'; $statusText = 'Rejected'; }
+                ?>
+                <tr>
+                    <td><?= htmlspecialchars((string)$application['club_name']) ?></td>
+                    <td><?= htmlspecialchars((string)$application['created_at']) ?></td>
+                    <td><span class="status-chip <?= $statusClass ?>"><?= $statusText ?></span></td>
+                    <td>
+                        <?php if ($status === 'rejected'): ?>
+                            <strong>Reason:</strong>
+                            <?= nl2br(htmlspecialchars((string)($application['rejection_reason'] ?: 'No reason provided.'))) ?>
+                        <?php else: ?>
+                            -
+                        <?php endif; ?>
+                    </td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+    <?php endif; ?>
+</div>
 
 <?php require __DIR__ . '/../layout/footer.php'; ?>

@@ -18,13 +18,17 @@
         <div><strong>وظایف:</strong> <?= nl2br(htmlspecialchars($a['proposed_duties'] ?? '')) ?></div>
         <div><strong>تعهدات:</strong> <?= nl2br(htmlspecialchars($a['proposed_commitments'] ?? '')) ?></div>
     </td>
-    <td>
-        <form method="post" action="/manager/applications/approve" style="display:inline-block;">
+    <td style="min-width:320px;">
+        <form method="post" action="/manager/applications/approve" style="display:inline-block; margin-bottom:8px;">
             <input type="hidden" name="application_id" value="<?= (int)$a['id'] ?>">
             <button class="btn btn-success" type="submit">تایید</button>
         </form>
-        <form method="post" action="/manager/applications/reject" style="display:inline-block;">
+
+        <form method="post" action="/manager/applications/reject">
             <input type="hidden" name="application_id" value="<?= (int)$a['id'] ?>">
+            <label for="rejection_reason_<?= (int)$a['id'] ?>"><strong>Reason for rejection</strong></label>
+            <textarea id="rejection_reason_<?= (int)$a['id'] ?>" name="rejection_reason" rows="3" required
+                      placeholder="Explain briefly why this application is being rejected."></textarea>
             <button class="btn btn-danger" type="submit">رد</button>
         </form>
     </td>
