@@ -75,6 +75,15 @@ $router->get('/manager/applications/manage', 'ManagerHiringController@manageAppl
 $router->post('/manager/applications/approve', 'ManagerHiringController@approveApplication');
 $router->post('/manager/applications/reject', 'ManagerHiringController@rejectApplication');
 
+
+// Governance
+$router->get('/governance/cases', 'GovernanceController@index');
+$router->get('/governance/cases/new', 'GovernanceController@createForm');
+$router->post('/governance/cases/create', 'GovernanceController@createCase');
+$router->get('/governance/cases/{id}', 'GovernanceController@detail');
+$router->get('/governance/review', 'GovernanceController@reviewIndex');
+$router->post('/governance/review/{id}/resolve', 'GovernanceController@resolve');
+
 // Admin
 $router->get('/admin', 'AdminController@index');
 $router->get('/admin/clubs/create', 'AdminController@createClubForm');

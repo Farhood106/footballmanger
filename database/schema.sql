@@ -447,29 +447,37 @@ CREATE TABLE IF NOT EXISTS club_governance_cases (
     id INT AUTO_INCREMENT PRIMARY KEY,
     club_id INT NOT NULL,
     contract_id INT,
+    owner_user_id INT,
+    manager_user_id INT,
     raised_by_user_id INT NOT NULL,
-    against_user_id INT NOT NULL,
-    case_type ENUM('CONTRACT_DISPUTE','ROLE_CONFLICT','FINANCIAL_DISPUTE','DISCIPLINARY') NOT NULL,
-    status ENUM('OPEN','UNDER_REVIEW','DECIDED','CLOSED') DEFAULT 'OPEN',
+    against_user_id INT,
+    case_type ENUM('UNFAIR_DISMISSAL','COMPENSATION_DISAGREEMENT','CONTRACT_BREACH','MUTUAL_TERMINATION_DISPUTE','OTHER') NOT NULL,
+    subject VARCHAR(255) NOT NULL,
     description TEXT,
+    status ENUM('open','under_review','resolved','rejected') DEFAULT 'open',
     opened_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    closed_at DATETIME,
+    resolved_at DATETIME,
     FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
     FOREIGN KEY (contract_id) REFERENCES manager_contracts(id) ON DELETE SET NULL,
+    FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (manager_user_id) REFERENCES users(id) ON DELETE SET NULL,
     FOREIGN KEY (raised_by_user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (against_user_id) REFERENCES users(id) ON DELETE CASCADE
+    FOREIGN KEY (against_user_id) REFERENCES users(id) ON DELETE SET NULL,
+    INDEX idx_governance_status (club_id, status)
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS club_governance_decisions (
     id INT AUTO_INCREMENT PRIMARY KEY,
     case_id INT NOT NULL,
+    decision_type ENUM('CASE_UPHELD','CASE_REJECTED','WARNING','PENALTY','COMPENSATION','MIXED') NOT NULL,
+    decision_summary TEXT NOT NULL,
+    penalty_amount BIGINT DEFAULT 0,
+    compensation_amount BIGINT DEFAULT 0,
     decided_by_user_id INT,
-    decision ENUM('WARNING','FINE','COMPENSATION','CONTRACT_UPHELD','CONTRACT_TERMINATED','NO_ACTION') NOT NULL,
-    summary TEXT,
-    applied_actions JSON,
     decided_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (case_id) REFERENCES club_governance_cases(id) ON DELETE CASCADE,
-    FOREIGN KEY (decided_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+    FOREIGN KEY (decided_by_user_id) REFERENCES users(id) ON DELETE SET NULL,
+    INDEX idx_case_decision (case_id, decided_at)
 ) ENGINE=InnoDB;
 
 -- Club finance ledger (authoritative transaction history)
