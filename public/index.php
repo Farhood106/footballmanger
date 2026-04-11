@@ -101,5 +101,12 @@ $router->post('/admin/seasons/{id}/end', 'AdminCompetitionController@endSeason')
 $router->post('/admin/seasons/{id}/fixtures/generate', 'AdminCompetitionController@generateFixtures');
 $router->get('/admin/seasons/{id}/fixtures', 'AdminCompetitionController@fixtures');
 
+
+$router->get('/admin/match-operations', 'AdminMatchOperationsController@index');
+$router->post('/admin/match-operations/{id}/repair', 'AdminMatchOperationsController@repair');
+$router->post('/admin/match-operations/{id}/rerun', 'AdminMatchOperationsController@rerun');
+$router->post('/admin/match-operations/{id}/reset-lineup', 'AdminMatchOperationsController@resetLineup');
+$router->post('/admin/match-operations/cycle/sync', 'AdminMatchOperationsController@syncCycle');
+
 // Dispatch request
 $router->dispatch();
