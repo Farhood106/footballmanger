@@ -17,14 +17,14 @@
 
             <?php foreach ($players as $p): ?>
             <tr>
-                <td><?= htmlspecialchars($p['name']) ?></td>
+                <td><?= htmlspecialchars($p['full_name'] ?? '') ?></td>
                 <td><?= htmlspecialchars($p['position']) ?></td>
                 <td><?= $p['overall'] ?></td>
-                <td><?= number_format($p['price']) ?> $</td>
+                <td><?= number_format($p['market_value']) ?> $</td>
                 <td>
                     <form method="POST" action="/transfer/bid" data-ajax>
                         <input type="hidden" name="player_id" value="<?= $p['id'] ?>">
-                        <input type="number" name="amount" value="<?= $p['price'] ?>" style="width:100px;">
+                        <input type="number" name="amount" value="<?= $p['market_value'] ?>" style="width:100px;">
                         <button class="btn btn-success">پیشنهاد</button>
                     </form>
                 </td>

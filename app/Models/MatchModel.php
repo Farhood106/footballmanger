@@ -19,7 +19,12 @@ class MatchModel extends BaseModel {
 
     public function getByClub(int $clubId, int $limit = 10): array {
         return $this->db->fetchAll(
-            "SELECT m.*, hc.name AS home_club_name, ac.name AS away_club_name
+            "SELECT m.*, hc.name AS home_club_name, ac.name AS away_club_name,
+                    CASE WHEN m.home_club_id = ? THEN ac.name ELSE hc.name END AS opponent_name,
+                    CASE WHEN m.home_club_id = ? THEN 'HOME' ELSE 'AWAY' END AS home_away,
+                    DATE_FORMAT(m.scheduled_at, '%Y-%m-%d %H:%i') AS match_date,
+                    m.home_score AS home_goals,
+                    m.away_score AS away_goals
              FROM matches m
              JOIN clubs hc ON m.home_club_id = hc.id
              JOIN clubs ac ON m.away_club_id = ac.id
@@ -27,13 +32,16 @@ class MatchModel extends BaseModel {
                AND m.status = 'FINISHED'
              ORDER BY m.scheduled_at DESC
              LIMIT ?",
-            [$clubId, $clubId, $limit]
+            [$clubId, $clubId, $clubId, $clubId, $limit]
         );
     }
 
     public function getUpcoming(int $clubId, int $limit = 5): array {
         return $this->db->fetchAll(
-            "SELECT m.*, hc.name AS home_club_name, ac.name AS away_club_name, comp.name AS competition_name
+            "SELECT m.*, hc.name AS home_club_name, ac.name AS away_club_name, comp.name AS competition_name,
+                    CASE WHEN m.home_club_id = ? THEN ac.name ELSE hc.name END AS opponent_name,
+                    CASE WHEN m.home_club_id = ? THEN 'HOME' ELSE 'AWAY' END AS home_away,
+                    DATE_FORMAT(m.scheduled_at, '%Y-%m-%d %H:%i') AS match_date
              FROM matches m
              JOIN clubs hc ON m.home_club_id = hc.id
              JOIN clubs ac ON m.away_club_id = ac.id
@@ -43,7 +51,7 @@ class MatchModel extends BaseModel {
                AND m.status = 'SCHEDULED'
              ORDER BY m.scheduled_at ASC
              LIMIT ?",
-            [$clubId, $clubId, $limit]
+            [$clubId, $clubId, $clubId, $clubId, $limit]
         );
     }
 

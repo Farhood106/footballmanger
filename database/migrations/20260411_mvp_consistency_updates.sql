@@ -1,8 +1,36 @@
 -- MVP consistency migration for multiplayer club-management loop
 
-ALTER TABLE clubs CHANGE COLUMN budget balance BIGINT DEFAULT 10000000;
-ALTER TABLE matches CHANGE COLUMN match_time scheduled_at DATETIME NOT NULL;
-ALTER TABLE players CHANGE COLUMN overall_rating overall INT NOT NULL;
+-- NOTE: run on legacy databases only; canonical installs should use database/schema.sql
+
+SET @has_budget := (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'clubs' AND COLUMN_NAME = 'budget'
+);
+SET @sql := IF(@has_budget > 0,
+    'ALTER TABLE clubs CHANGE COLUMN budget balance BIGINT DEFAULT 10000000',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @has_match_time := (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'matches' AND COLUMN_NAME = 'match_time'
+);
+SET @sql := IF(@has_match_time > 0,
+    'ALTER TABLE matches CHANGE COLUMN match_time scheduled_at DATETIME NOT NULL',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @has_overall_rating := (
+    SELECT COUNT(*) FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'players' AND COLUMN_NAME = 'overall_rating'
+);
+SET @sql := IF(@has_overall_rating > 0,
+    'ALTER TABLE players CHANGE COLUMN overall_rating overall INT NOT NULL',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 CREATE TABLE IF NOT EXISTS tactic_lineups (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -30,7 +58,11 @@ CREATE TABLE IF NOT EXISTS manager_contracts (
     terms_json JSON,
     termination_reason VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
+    FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (coach_user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_contract_status (club_id, status)
 );
 
 CREATE TABLE IF NOT EXISTS club_governance_cases (
@@ -43,7 +75,11 @@ CREATE TABLE IF NOT EXISTS club_governance_cases (
     status ENUM('OPEN','UNDER_REVIEW','DECIDED','CLOSED') DEFAULT 'OPEN',
     description TEXT,
     opened_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    closed_at DATETIME
+    closed_at DATETIME,
+    FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
+    FOREIGN KEY (contract_id) REFERENCES manager_contracts(id) ON DELETE SET NULL,
+    FOREIGN KEY (raised_by_user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (against_user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS club_governance_decisions (
@@ -53,7 +89,9 @@ CREATE TABLE IF NOT EXISTS club_governance_decisions (
     decision ENUM('WARNING','FINE','COMPENSATION','CONTRACT_UPHELD','CONTRACT_TERMINATED','NO_ACTION') NOT NULL,
     summary TEXT,
     applied_actions JSON,
-    decided_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    decided_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (case_id) REFERENCES club_governance_cases(id) ON DELETE CASCADE,
+    FOREIGN KEY (decided_by_user_id) REFERENCES users(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS club_finance_ledger (
@@ -65,7 +103,10 @@ CREATE TABLE IF NOT EXISTS club_finance_ledger (
     description VARCHAR(500),
     reference_type VARCHAR(50),
     reference_id INT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
+    FOREIGN KEY (season_id) REFERENCES seasons(id) ON DELETE SET NULL,
+    INDEX idx_finance_club_date (club_id, created_at)
 );
 
 CREATE TABLE IF NOT EXISTS daily_cycle_snapshots (
@@ -75,5 +116,6 @@ CREATE TABLE IF NOT EXISTS daily_cycle_snapshots (
     executed_at DATETIME NOT NULL,
     matches_simulated INT DEFAULT 0,
     payload JSON,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_cycle_phase_execution (cycle_date, phase_key, executed_at)
 );

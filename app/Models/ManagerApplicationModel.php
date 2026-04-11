@@ -140,10 +140,34 @@ class ManagerApplicationModel extends BaseModel {
 
         $this->db->beginTransaction();
         try {
+            $clubId = (int)$app['club_id'];
+            $coachId = (int)$app['coach_user_id'];
+            $ownerId = (int)($app['owner_user_id'] ?? 0);
+
             $this->db->execute(
                 "UPDATE clubs SET manager_user_id = ?, user_id = ? WHERE id = ?",
-                [(int)$app['coach_user_id'], (int)$app['coach_user_id'], (int)$app['club_id']]
+                [$coachId, $coachId, $clubId]
             );
+
+            // close previous active contracts for club
+            $this->db->execute(
+                "UPDATE manager_contracts SET status = 'TERMINATED', termination_reason = 'Replaced by new appointment', updated_at = NOW()
+                 WHERE club_id = ? AND status = 'ACTIVE'",
+                [$clubId]
+            );
+
+            if ($ownerId > 0) {
+                $this->db->insert('manager_contracts', [
+                    'club_id' => $clubId,
+                    'owner_user_id' => $ownerId,
+                    'coach_user_id' => $coachId,
+                    'status' => 'ACTIVE',
+                    'start_date' => date('Y-m-d'),
+                    'end_date' => date('Y-m-d', strtotime('+2 years')),
+                    'salary' => 0,
+                    'terms_json' => json_encode(['source' => 'application_approval', 'application_id' => $applicationId]),
+                ]);
+            }
 
             $this->db->execute(
                 "UPDATE club_manager_applications
