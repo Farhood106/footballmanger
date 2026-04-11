@@ -24,15 +24,11 @@ class MatchEngine {
     }
 
     public function simulate(int $matchId): array {
-        $match = $this->db->fetchOne("SELECT * FROM matches WHERE id = ?", [$matchId]);
-        if (!$match || $match['status'] !== 'SCHEDULED') {
-            throw new Exception("Match not available for simulation");
-        }
+        $match = $this->claimScheduledMatch($matchId);
 
-        $this->db->query("UPDATE matches SET status = 'LIVE' WHERE id = ?", [$matchId]);
-
-        // ۱. بارگذاری داده‌ها
-        $homeSquad = $this->getSquad($match['home_club_id']);
+        try {
+            // ۱. بارگذاری داده‌ها
+            $homeSquad = $this->getSquad($match['home_club_id']);
         $awaySquad = $this->getSquad($match['away_club_id']);
         $homeTactics = $this->getTactics($match['home_club_id']);
         $awayTactics = $this->getTactics($match['away_club_id']);
@@ -66,16 +62,42 @@ class MatchEngine {
         // ۱۰. آپدیت جدول
         $this->updateStandings($match, $homeGoals, $awayGoals);
 
-        return [
-            'match_id' => $matchId,
-            'home_score' => $homeGoals,
-            'away_score' => $awayGoals,
-            'home_xg' => round($xG['home'], 2),
-            'away_xg' => round($xG['away'], 2),
-            'events' => $events,
-            'stats' => $stats,
-            'ratings' => $ratings
-        ];
+            return [
+                'match_id' => $matchId,
+                'home_score' => $homeGoals,
+                'away_score' => $awayGoals,
+                'home_xg' => round($xG['home'], 2),
+                'away_xg' => round($xG['away'], 2),
+                'events' => $events,
+                'stats' => $stats,
+                'ratings' => $ratings
+            ];
+        } catch (Throwable $e) {
+            // rollback claim so the match can be retried safely
+            $this->db->query("UPDATE matches SET status = 'SCHEDULED' WHERE id = ? AND status = 'LIVE'", [$matchId]);
+            throw $e;
+        }
+    }
+
+    private function claimScheduledMatch(int $matchId): array {
+        $this->db->beginTransaction();
+        try {
+            $match = $this->db->fetchOne("SELECT * FROM matches WHERE id = ? FOR UPDATE", [$matchId]);
+            if (!$match || $match['status'] !== 'SCHEDULED') {
+                $this->db->rollBack();
+                throw new Exception("Match not available for simulation");
+            }
+
+            $this->db->query("UPDATE matches SET status = 'LIVE' WHERE id = ? AND status = 'SCHEDULED'", [$matchId]);
+            $this->db->commit();
+
+            return $match;
+        } catch (Throwable $e) {
+            if (method_exists($this->db, 'rollBack')) {
+                try { $this->db->rollBack(); } catch (Throwable $ignored) {}
+            }
+            throw $e;
+        }
     }
 
     // ─── محاسبه قدرت تیم ───────────────────────────────────────────────────
