@@ -4,6 +4,8 @@
 class ManagerApplicationModel extends BaseModel {
     protected string $table = 'club_manager_applications';
 
+    private const NEGOTIATION_STATUSES = ['open', 'accepted', 'rejected', 'expired', 'superseded'];
+
     public function __construct() {
         parent::__construct();
         $this->ensureTables();
@@ -43,12 +45,35 @@ class ManagerApplicationModel extends BaseModel {
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
         );
 
+        $this->db->execute(
+            "CREATE TABLE IF NOT EXISTS manager_contract_negotiations (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                application_id INT NOT NULL,
+                club_id INT NOT NULL,
+                coach_user_id INT NOT NULL,
+                owner_user_id INT NOT NULL,
+                status ENUM('open','accepted','rejected','expired','superseded') DEFAULT 'open',
+                offered_salary_per_cycle BIGINT NOT NULL,
+                offered_contract_length_cycles INT NOT NULL,
+                club_objective VARCHAR(255),
+                bonus_promotion BIGINT DEFAULT 0,
+                bonus_title BIGINT DEFAULT 0,
+                created_by_user_id INT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                responded_at DATETIME,
+                INDEX idx_negotiation_application_status (application_id, status),
+                INDEX idx_negotiation_coach_status (coach_user_id, status),
+                INDEX idx_negotiation_owner_status (owner_user_id, status)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
+
         $this->ensureColumnExists('club_manager_applications', 'rejection_reason', "VARCHAR(1000) NULL AFTER status");
         $this->renameColumnIfExists('club_manager_applications', 'reviewed_by', 'reviewed_by_user_id', 'INT NULL');
         $this->db->execute("UPDATE club_manager_applications SET status = LOWER(status)");
 
         $this->ensureUtf8ForTable('club_manager_expectations');
         $this->ensureUtf8ForTable('club_manager_applications');
+        $this->ensureUtf8ForTable('manager_contract_negotiations');
     }
 
     public function upsertExpectation(int $clubId, int $ownerUserId, string $title, string $expectations, string $duties, string $commitments): void {
@@ -141,6 +166,205 @@ class ManagerApplicationModel extends BaseModel {
         );
     }
 
+    public function getOffersForReviewer(int $userId, bool $isAdmin): array {
+        if ($isAdmin) {
+            return $this->db->fetchAll(
+                "SELECT n.*, c.name AS club_name, u.username AS coach_name
+                 FROM manager_contract_negotiations n
+                 JOIN clubs c ON c.id = n.club_id
+                 JOIN users u ON u.id = n.coach_user_id
+                 WHERE n.status = 'open'
+                 ORDER BY n.created_at DESC"
+            );
+        }
+
+        return $this->db->fetchAll(
+            "SELECT n.*, c.name AS club_name, u.username AS coach_name
+             FROM manager_contract_negotiations n
+             JOIN clubs c ON c.id = n.club_id
+             JOIN users u ON u.id = n.coach_user_id
+             WHERE n.status = 'open' AND n.owner_user_id = ?
+             ORDER BY n.created_at DESC",
+            [$userId]
+        );
+    }
+
+    public function getOffersForCoach(int $coachUserId): array {
+        return $this->db->fetchAll(
+            "SELECT n.*, c.name AS club_name, o.username AS owner_name
+             FROM manager_contract_negotiations n
+             JOIN clubs c ON c.id = n.club_id
+             LEFT JOIN users o ON o.id = n.owner_user_id
+             WHERE n.coach_user_id = ?
+             ORDER BY n.created_at DESC",
+            [$coachUserId]
+        );
+    }
+
+    public function sendOffer(
+        int $applicationId,
+        int $actorId,
+        bool $isAdmin,
+        int $salaryPerCycle,
+        int $lengthCycles,
+        string $clubObjective,
+        int $bonusPromotion,
+        int $bonusTitle
+    ): array {
+        if ($salaryPerCycle < 0) {
+            return ['ok' => false, 'error' => 'Salary must be non-negative.'];
+        }
+        if ($lengthCycles <= 0) {
+            return ['ok' => false, 'error' => 'Contract length must be a positive number of cycles.'];
+        }
+
+        $app = $this->db->fetchOne(
+            "SELECT a.*, c.owner_user_id, c.manager_user_id FROM club_manager_applications a
+             JOIN clubs c ON c.id = a.club_id
+             WHERE a.id = ?",
+            [$applicationId]
+        );
+
+        if (!$app || strtolower((string)$app['status']) !== 'pending') {
+            return ['ok' => false, 'error' => 'Application is not open for negotiation.'];
+        }
+
+        $ownerId = (int)($app['owner_user_id'] ?? 0);
+        if ($ownerId <= 0) {
+            return ['ok' => false, 'error' => 'Club owner is not set.'];
+        }
+
+        $canReview = $isAdmin || $ownerId === $actorId;
+        if (!$canReview) {
+            return ['ok' => false, 'error' => 'Only owner/admin can send an offer.'];
+        }
+
+        $duplicateOpen = $this->db->fetchOne(
+            "SELECT id FROM manager_contract_negotiations WHERE application_id = ? AND status = 'open' LIMIT 1",
+            [$applicationId]
+        );
+
+        if ($duplicateOpen) {
+            return ['ok' => false, 'error' => 'An active negotiation already exists for this application.'];
+        }
+
+        $this->db->insert('manager_contract_negotiations', [
+            'application_id' => $applicationId,
+            'club_id' => (int)$app['club_id'],
+            'coach_user_id' => (int)$app['coach_user_id'],
+            'owner_user_id' => $ownerId,
+            'status' => 'open',
+            'offered_salary_per_cycle' => $salaryPerCycle,
+            'offered_contract_length_cycles' => $lengthCycles,
+            'club_objective' => trim($clubObjective),
+            'bonus_promotion' => max(0, $bonusPromotion),
+            'bonus_title' => max(0, $bonusTitle),
+            'created_by_user_id' => $actorId,
+        ]);
+
+        return ['ok' => true];
+    }
+
+    public function respondToOffer(
+        int $negotiationId,
+        int $actorId,
+        bool $isAdmin,
+        string $action,
+        int $salaryPerCycle = 0,
+        int $lengthCycles = 0,
+        string $clubObjective = '',
+        int $bonusPromotion = 0,
+        int $bonusTitle = 0
+    ): array {
+        $offer = $this->db->fetchOne("SELECT * FROM manager_contract_negotiations WHERE id = ?", [$negotiationId]);
+        if (!$offer) return ['ok' => false, 'error' => 'Offer not found.'];
+        if (($offer['status'] ?? '') !== 'open') {
+            return ['ok' => false, 'error' => 'This negotiation is already closed.'];
+        }
+
+        $isCoach = (int)$offer['coach_user_id'] === $actorId;
+        if (!$isCoach && !$isAdmin) {
+            return ['ok' => false, 'error' => 'Only targeted coach/admin can respond to this offer.'];
+        }
+
+        $normalized = strtolower(trim($action));
+        if (!in_array($normalized, ['accept', 'reject', 'counter'], true)) {
+            return ['ok' => false, 'error' => 'Invalid response action.'];
+        }
+
+        if ($normalized === 'accept') {
+            $this->db->beginTransaction();
+            try {
+                $this->db->execute(
+                    "UPDATE manager_contract_negotiations SET status = 'accepted', responded_at = NOW() WHERE id = ? AND status = 'open'",
+                    [$negotiationId]
+                );
+
+                $activation = $this->activateContractFromNegotiation((int)$offer['id'], (int)$actorId, (bool)$isAdmin);
+                if (!$activation['ok']) {
+                    $this->db->rollBack();
+                    return $activation;
+                }
+
+                $this->db->execute(
+                    "UPDATE manager_contract_negotiations
+                     SET status = 'superseded', responded_at = NOW()
+                     WHERE application_id = ? AND status = 'open' AND id <> ?",
+                    [(int)$offer['application_id'], $negotiationId]
+                );
+
+                $this->db->commit();
+                return ['ok' => true];
+            } catch (Throwable $e) {
+                $this->db->rollBack();
+                return ['ok' => false, 'error' => $e->getMessage()];
+            }
+        }
+
+        if ($normalized === 'reject') {
+            $this->db->execute(
+                "UPDATE manager_contract_negotiations SET status = 'rejected', responded_at = NOW() WHERE id = ? AND status = 'open'",
+                [$negotiationId]
+            );
+            return ['ok' => true];
+        }
+
+        if ($salaryPerCycle < 0) {
+            return ['ok' => false, 'error' => 'Salary must be non-negative.'];
+        }
+        if ($lengthCycles <= 0) {
+            return ['ok' => false, 'error' => 'Contract length must be a positive number of cycles.'];
+        }
+
+        $this->db->beginTransaction();
+        try {
+            $this->db->execute(
+                "UPDATE manager_contract_negotiations SET status = 'superseded', responded_at = NOW() WHERE id = ? AND status = 'open'",
+                [$negotiationId]
+            );
+
+            $this->db->insert('manager_contract_negotiations', [
+                'application_id' => (int)$offer['application_id'],
+                'club_id' => (int)$offer['club_id'],
+                'coach_user_id' => (int)$offer['coach_user_id'],
+                'owner_user_id' => (int)$offer['owner_user_id'],
+                'status' => 'open',
+                'offered_salary_per_cycle' => $salaryPerCycle,
+                'offered_contract_length_cycles' => $lengthCycles,
+                'club_objective' => trim($clubObjective),
+                'bonus_promotion' => max(0, $bonusPromotion),
+                'bonus_title' => max(0, $bonusTitle),
+                'created_by_user_id' => $actorId,
+            ]);
+
+            $this->db->commit();
+            return ['ok' => true];
+        } catch (Throwable $e) {
+            $this->db->rollBack();
+            return ['ok' => false, 'error' => $e->getMessage()];
+        }
+    }
+
     public function approve(int $applicationId, int $reviewerId, bool $isAdmin): bool {
         $app = $this->db->fetchOne(
             "SELECT a.*, c.owner_user_id FROM club_manager_applications a
@@ -192,6 +416,13 @@ class ManagerApplicationModel extends BaseModel {
             );
 
             $this->db->execute(
+                "UPDATE manager_contract_negotiations
+                 SET status = 'superseded', responded_at = NOW()
+                 WHERE application_id = ? AND status = 'open'",
+                [$applicationId]
+            );
+
+            $this->db->execute(
                 "UPDATE club_manager_applications
                  SET status = 'rejected', rejection_reason = 'Another candidate was selected for this role.',
                      reviewed_by_user_id = ?, reviewed_at = NOW()
@@ -220,12 +451,98 @@ class ManagerApplicationModel extends BaseModel {
         $canReview = $isAdmin || ((int)$app['owner_user_id'] === $reviewerId);
         if (!$canReview) return false;
 
+        $this->db->execute(
+            "UPDATE manager_contract_negotiations
+             SET status = 'superseded', responded_at = NOW()
+             WHERE application_id = ? AND status = 'open'",
+            [$applicationId]
+        );
+
         return $this->db->execute(
             "UPDATE club_manager_applications
              SET status = 'rejected', rejection_reason = ?, reviewed_by_user_id = ?, reviewed_at = NOW()
              WHERE id = ?",
             [$reason, $reviewerId, $applicationId]
         ) > 0;
+    }
+
+    private function activateContractFromNegotiation(int $negotiationId, int $actorId, bool $isAdmin): array {
+        $offer = $this->db->fetchOne(
+            "SELECT n.*, a.status AS application_status
+             FROM manager_contract_negotiations n
+             JOIN club_manager_applications a ON a.id = n.application_id
+             WHERE n.id = ?",
+            [$negotiationId]
+        );
+        if (!$offer) return ['ok' => false, 'error' => 'Offer not found for activation.'];
+        if (strtolower((string)$offer['application_status']) !== 'pending') {
+            return ['ok' => false, 'error' => 'Application is not pending anymore.'];
+        }
+
+        $clubId = (int)$offer['club_id'];
+        $coachId = (int)$offer['coach_user_id'];
+        $ownerId = (int)$offer['owner_user_id'];
+
+        $otherClub = $this->db->fetchOne(
+            "SELECT id FROM clubs WHERE manager_user_id = ? AND id <> ? LIMIT 1",
+            [$coachId, $clubId]
+        );
+        if ($otherClub) {
+            return ['ok' => false, 'error' => 'Coach is already assigned as manager of another club.'];
+        }
+
+        $this->db->execute(
+            "UPDATE manager_contracts
+             SET status = 'TERMINATED', termination_reason = 'Replaced by negotiated appointment', updated_at = NOW()
+             WHERE club_id = ? AND status = 'ACTIVE'",
+            [$clubId]
+        );
+
+        $startDate = date('Y-m-d');
+        $endDate = date('Y-m-d', strtotime('+' . max(1, (int)$offer['offered_contract_length_cycles']) . ' months'));
+
+        $this->db->insert('manager_contracts', [
+            'club_id' => $clubId,
+            'owner_user_id' => $ownerId,
+            'coach_user_id' => $coachId,
+            'status' => 'ACTIVE',
+            'start_date' => $startDate,
+            'end_date' => $endDate,
+            'salary' => (int)$offer['offered_salary_per_cycle'],
+            'terms_json' => json_encode([
+                'source' => 'negotiation_accept',
+                'application_id' => (int)$offer['application_id'],
+                'negotiation_id' => $negotiationId,
+                'contract_length_cycles' => (int)$offer['offered_contract_length_cycles'],
+                'club_objective' => (string)($offer['club_objective'] ?? ''),
+                'bonus_promotion' => (int)($offer['bonus_promotion'] ?? 0),
+                'bonus_title' => (int)($offer['bonus_title'] ?? 0),
+                'accepted_by_user_id' => $actorId,
+                'accepted_by_admin' => $isAdmin,
+            ]),
+        ]);
+
+        $this->db->execute(
+            "UPDATE clubs SET manager_user_id = ?, user_id = ? WHERE id = ?",
+            [$coachId, $coachId, $clubId]
+        );
+
+        $this->db->execute(
+            "UPDATE club_manager_applications
+             SET status = 'approved', rejection_reason = NULL, reviewed_by_user_id = ?, reviewed_at = NOW()
+             WHERE id = ?",
+            [$ownerId, (int)$offer['application_id']]
+        );
+
+        $this->db->execute(
+            "UPDATE club_manager_applications
+             SET status = 'rejected', rejection_reason = 'Another candidate was selected for this role.',
+                 reviewed_by_user_id = ?, reviewed_at = NOW()
+             WHERE club_id = ? AND LOWER(status) = 'pending' AND id <> ?",
+            [$ownerId, $clubId, (int)$offer['application_id']]
+        );
+
+        return ['ok' => true];
     }
 
     private function ensureColumnExists(string $table, string $column, string $definition): void {

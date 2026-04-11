@@ -453,6 +453,32 @@ CREATE TABLE IF NOT EXISTS manager_contracts (
     INDEX idx_contract_status (club_id, status)
 ) ENGINE=InnoDB;
 
+-- Negotiation offers for owner/coach contract discussions
+CREATE TABLE IF NOT EXISTS manager_contract_negotiations (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    application_id INT NOT NULL,
+    club_id INT NOT NULL,
+    coach_user_id INT NOT NULL,
+    owner_user_id INT NOT NULL,
+    status ENUM('open','accepted','rejected','expired','superseded') DEFAULT 'open',
+    offered_salary_per_cycle BIGINT NOT NULL,
+    offered_contract_length_cycles INT NOT NULL,
+    club_objective VARCHAR(255),
+    bonus_promotion BIGINT DEFAULT 0,
+    bonus_title BIGINT DEFAULT 0,
+    created_by_user_id INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    responded_at DATETIME,
+    FOREIGN KEY (application_id) REFERENCES club_manager_applications(id) ON DELETE CASCADE,
+    FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
+    FOREIGN KEY (coach_user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_negotiation_application_status (application_id, status),
+    INDEX idx_negotiation_coach_status (coach_user_id, status),
+    INDEX idx_negotiation_owner_status (owner_user_id, status)
+) ENGINE=InnoDB;
+
 -- Governance: owner/coach dispute case
 CREATE TABLE IF NOT EXISTS club_governance_cases (
     id INT AUTO_INCREMENT PRIMARY KEY,

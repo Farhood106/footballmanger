@@ -75,6 +75,11 @@ $router->get('/manager/applications/manage', 'ManagerHiringController@manageAppl
 $router->post('/manager/applications/approve', 'ManagerHiringController@approveApplication');
 $router->post('/manager/applications/reject', 'ManagerHiringController@rejectApplication');
 
+$router->post('/manager/applications/offer', 'ManagerHiringController@sendOffer');
+$router->post('/manager/offers/{id}/accept', 'ManagerHiringController@respondOfferAccept');
+$router->post('/manager/offers/{id}/reject', 'ManagerHiringController@respondOfferReject');
+$router->post('/manager/offers/{id}/counter', 'ManagerHiringController@respondOfferCounter');
+
 
 // Governance
 $router->get('/governance/cases', 'GovernanceController@index');

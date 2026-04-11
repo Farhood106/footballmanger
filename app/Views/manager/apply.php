@@ -73,6 +73,53 @@ $ownerCommitments = trim((string)($exp['commitments'] ?? ''));
 </div>
 <?php endforeach; ?>
 
+
+<div class="card">
+    <h2>Contract Offers</h2>
+    <table class="table">
+        <thead><tr><th>Club</th><th>Status</th><th>Terms</th><th>Actions</th></tr></thead>
+        <tbody>
+        <?php foreach (($offers ?? []) as $offer): ?>
+            <tr>
+                <td><?= htmlspecialchars((string)$offer['club_name']) ?></td>
+                <td><?= htmlspecialchars((string)$offer['status']) ?></td>
+                <td>
+                    Salary/cycle: <?= (int)$offer['offered_salary_per_cycle'] ?><br>
+                    Length: <?= (int)$offer['offered_contract_length_cycles'] ?> cycles<br>
+                    Objective: <?= htmlspecialchars((string)($offer['club_objective'] ?? '-')) ?><br>
+                    Bonus(Promotion/Title): <?= (int)($offer['bonus_promotion'] ?? 0) ?> / <?= (int)($offer['bonus_title'] ?? 0) ?>
+                </td>
+                <td style="min-width:320px;">
+                    <?php if (($offer['status'] ?? '') === 'open'): ?>
+                        <form method="post" action="/manager/offers/<?= (int)$offer['id'] ?>/accept" style="display:inline-block; margin-bottom:6px;">
+                            <button class="btn btn-success" type="submit">Accept</button>
+                        </form>
+                        <form method="post" action="/manager/offers/<?= (int)$offer['id'] ?>/reject" style="display:inline-block; margin-bottom:6px;">
+                            <button class="btn btn-danger" type="submit">Reject</button>
+                        </form>
+                        <form method="post" action="/manager/offers/<?= (int)$offer['id'] ?>/counter">
+                            <div class="grid">
+                                <div class="form-group"><input type="number" min="0" name="offered_salary_per_cycle" placeholder="Counter salary" required></div>
+                                <div class="form-group"><input type="number" min="1" name="offered_contract_length_cycles" placeholder="Counter length" required></div>
+                            </div>
+                            <div class="grid">
+                                <div class="form-group"><input type="text" name="club_objective" placeholder="Counter objective"></div>
+                                <div class="form-group"><input type="number" min="0" name="bonus_promotion" placeholder="Promotion bonus"></div>
+                                <div class="form-group"><input type="number" min="0" name="bonus_title" placeholder="Title bonus"></div>
+                            </div>
+                            <button class="btn" type="submit">Send Counter Offer</button>
+                        </form>
+                    <?php else: ?>
+                        -
+                    <?php endif; ?>
+                </td>
+            </tr>
+        <?php endforeach; ?>
+        <?php if (empty($offers)): ?><tr><td colspan="4">No offers yet.</td></tr><?php endif; ?>
+        </tbody>
+    </table>
+</div>
+
 <div class="card">
     <h2>My Manager Applications</h2>
     <?php if (empty($history)): ?>
