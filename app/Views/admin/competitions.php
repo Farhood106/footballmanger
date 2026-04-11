@@ -64,7 +64,7 @@
 
     <h4>Seasons</h4>
     <table class="table">
-        <thead><tr><th>Name</th><th>Dates</th><th>Status</th><th>Participants</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Name</th><th>Dates</th><th>Status</th><th>Participants</th><th>Rollover Readiness</th><th>Actions</th></tr></thead>
         <tbody>
         <?php foreach (($c['seasons'] ?? []) as $s): ?>
             <?php $participants = $s['participants'] ?? []; ?>
@@ -74,14 +74,26 @@
                 <td><?= htmlspecialchars($s['status']) ?></td>
                 <td><?= count($participants) ?> / <?= (int)$c['teams_count'] ?></td>
                 <td>
+                    <?php $roll = $s['rollover'] ?? []; ?>
+                    <?php if (!empty($roll['already_finalized'])): ?>
+                        Finalized
+                    <?php elseif (!empty($roll['ready'])): ?>
+                        Ready
+                    <?php else: ?>
+                        Not Ready (<?= (int)($roll['finished_matches'] ?? 0) ?>/<?= (int)($roll['total_matches'] ?? 0) ?> finished)
+                    <?php endif; ?>
+                </td>
+                <td>
                     <form method="post" action="/admin/seasons/<?= (int)$s['id'] ?>/start" style="display:inline-block;"><button class="btn">Start</button></form>
                     <form method="post" action="/admin/seasons/<?= (int)$s['id'] ?>/end" style="display:inline-block;"><button class="btn">End</button></form>
                     <form method="post" action="/admin/seasons/<?= (int)$s['id'] ?>/fixtures/generate" style="display:inline-block;"><button class="btn btn-success">Generate Fixtures</button></form>
+                    <form method="post" action="/admin/seasons/<?= (int)$s['id'] ?>/finalize" style="display:inline-block;"><button class="btn">Finalize Season</button></form>
+                    <form method="post" action="/admin/seasons/<?= (int)$s['id'] ?>/rollover/apply" style="display:inline-block;"><button class="btn">Apply Rollover</button></form>
                     <a class="btn" href="/admin/seasons/<?= (int)$s['id'] ?>/fixtures">View Fixtures</a>
                 </td>
             </tr>
             <tr>
-                <td colspan="5">
+                <td colspan="6">
                     <strong>Participants:</strong>
                     <table class="table" style="margin-top:8px;">
                         <thead><tr><th>Club</th><th>Entry Type</th><th>Remove</th></tr></thead>
@@ -101,6 +113,17 @@
                         </tbody>
                     </table>
 
+
+                    <?php if (!empty(($roll['rollover_plan'] ?? null))): ?>
+                        <?php $plan = $roll['rollover_plan']; ?>
+                        <div class="card" style="margin-top:8px; background:#f8fafc;">
+                            <strong>Rollover Plan Preview:</strong>
+                            <div>Promoted: <?= implode(', ', array_map(fn($r) => $r['club_name'] ?? ('#' . ($r['club_id'] ?? '?')), $plan['promoted'] ?? [])) ?: '-' ?></div>
+                            <div>Relegated: <?= implode(', ', array_map(fn($r) => $r['club_name'] ?? ('#' . ($r['club_id'] ?? '?')), $plan['relegated'] ?? [])) ?: '-' ?></div>
+                            <div>Direct: <?= implode(', ', array_map(fn($r) => $r['club_name'] ?? ('#' . ($r['club_id'] ?? '?')), $plan['direct'] ?? [])) ?: '-' ?></div>
+                            <div>Status: <?= htmlspecialchars((string)($roll['rollover_status'] ?? 'FINALIZED')) ?></div>
+                        </div>
+                    <?php endif; ?>
                     <form method="post" action="/admin/seasons/<?= (int)$s['id'] ?>/participants/add">
                         <div class="grid">
                             <div class="form-group">
@@ -129,7 +152,7 @@
                 </td>
             </tr>
         <?php endforeach; ?>
-        <?php if (empty($c['seasons'])): ?><tr><td colspan="5">No seasons.</td></tr><?php endif; ?>
+        <?php if (empty($c['seasons'])): ?><tr><td colspan="6">No seasons.</td></tr><?php endif; ?>
         </tbody>
     </table>
 

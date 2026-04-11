@@ -8,6 +8,7 @@ class AdminCompetitionService {
 
     public function __construct(?Database $db = null) {
         $this->db = $db ?? Database::getInstance();
+        $this->ensureRolloverTable();
     }
 
     public function listCompetitionsWithSeasons(): array {
@@ -25,13 +26,14 @@ class AdminCompetitionService {
             );
 
             foreach ($c['seasons'] as &$season) {
-                $season['participants'] = $this->getSeasonParticipants((int)$season['id']);
+                $sid = (int)$season['id'];
+                $season['participants'] = $this->getSeasonParticipants($sid);
+                $season['rollover'] = $this->getSeasonRolloverReadiness($sid);
             }
         }
 
         return $competitions;
     }
-
 
     public function listClubs(): array {
         return $this->db->fetchAll("SELECT id, name FROM clubs ORDER BY name ASC");
@@ -277,6 +279,233 @@ class AdminCompetitionService {
         return ['ok' => true, 'rounds' => count($schedule), 'matches' => array_sum(array_map('count', $schedule))];
     }
 
+    public function getSeasonRolloverReadiness(int $seasonId): array {
+        $season = $this->db->fetchOne("SELECT * FROM seasons WHERE id = ?", [$seasonId]);
+        if (!$season) {
+            return ['ready' => false, 'reason' => 'season_not_found'];
+        }
+
+        $competition = $this->db->fetchOne("SELECT * FROM competitions WHERE id = ?", [(int)$season['competition_id']]);
+        if (!$competition || !in_array($competition['type'], ['LEAGUE', 'CHAMPIONS_LEAGUE'], true)) {
+            return ['ready' => false, 'reason' => 'non_league_competition'];
+        }
+
+        $totalMatches = (int)($this->db->fetchOne("SELECT COUNT(*) AS c FROM matches WHERE season_id = ?", [$seasonId])['c'] ?? 0);
+        $finishedMatches = (int)($this->db->fetchOne("SELECT COUNT(*) AS c FROM matches WHERE season_id = ? AND status = 'FINISHED'", [$seasonId])['c'] ?? 0);
+        $participants = $this->getSeasonParticipants($seasonId);
+        $standingsCount = (int)($this->db->fetchOne("SELECT COUNT(*) AS c FROM standings WHERE season_id = ?", [$seasonId])['c'] ?? 0);
+        $log = $this->db->fetchOne("SELECT * FROM season_rollover_logs WHERE season_id = ?", [$seasonId]);
+        $alreadyFinalized = $log !== null;
+
+        $ready = $totalMatches > 0
+            && $totalMatches === $finishedMatches
+            && count($participants) >= 2
+            && $standingsCount >= count($participants)
+            && !$alreadyFinalized;
+
+        return [
+            'ready' => $ready,
+            'already_finalized' => $alreadyFinalized,
+            'total_matches' => $totalMatches,
+            'finished_matches' => $finishedMatches,
+            'participants_count' => count($participants),
+            'standings_count' => $standingsCount,
+            'reason' => $ready ? null : 'season_not_ready_for_finalization',
+            'rollover_status' => $log['status'] ?? null,
+            'rollover_plan' => !empty($log['rollover_plan_json']) ? json_decode((string)$log['rollover_plan_json'], true) : null,
+        ];
+    }
+
+    public function finalizeSeason(int $seasonId): array {
+        $readiness = $this->getSeasonRolloverReadiness($seasonId);
+        if (!($readiness['ready'] ?? false)) {
+            return ['ok' => false, 'error' => 'Season is not ready to finalize. Ensure all matches are finished and standings are complete.'];
+        }
+
+        $season = $this->db->fetchOne("SELECT * FROM seasons WHERE id = ?", [$seasonId]);
+        $standings = $this->getOrderedStandings($seasonId);
+        $preview = $this->previewRollover($seasonId);
+
+        $this->db->beginTransaction();
+        try {
+            $this->db->insert('season_rollover_logs', [
+                'season_id' => $seasonId,
+                'competition_id' => (int)$season['competition_id'],
+                'status' => 'FINALIZED',
+                'finalized_standings_json' => json_encode($standings, JSON_UNESCAPED_UNICODE),
+                'rollover_plan_json' => json_encode($preview, JSON_UNESCAPED_UNICODE),
+                'finalized_at' => date('Y-m-d H:i:s'),
+            ]);
+
+            $this->db->execute("UPDATE seasons SET status = 'FINISHED' WHERE id = ?", [$seasonId]);
+            $this->db->commit();
+            return ['ok' => true, 'preview' => $preview];
+        } catch (Throwable $e) {
+            $this->db->rollBack();
+            return ['ok' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    public function previewRollover(int $seasonId): array {
+        $season = $this->db->fetchOne("SELECT * FROM seasons WHERE id = ?", [$seasonId]);
+        if (!$season) {
+            return ['ok' => false, 'error' => 'Season not found.'];
+        }
+
+        $competition = $this->db->fetchOne("SELECT * FROM competitions WHERE id = ?", [(int)$season['competition_id']]);
+        if (!$competition || !in_array($competition['type'], ['LEAGUE', 'CHAMPIONS_LEAGUE'], true)) {
+            return ['ok' => false, 'error' => 'Rollover is available only for league-style competitions in MVP.'];
+        }
+
+        $standings = $this->getOrderedStandings($seasonId);
+        if (empty($standings)) {
+            return ['ok' => false, 'error' => 'No standings available for season rollover.'];
+        }
+
+        $promotionSlots = max(0, (int)($competition['promotion_slots'] ?? 0));
+        $relegationSlots = max(0, (int)($competition['relegation_slots'] ?? 0));
+
+        $promoted = array_slice($standings, 0, $promotionSlots);
+        $relegated = $relegationSlots > 0 ? array_slice($standings, -$relegationSlots) : [];
+
+        $promotedIds = array_map(fn($r) => (int)$r['club_id'], $promoted);
+        $relegatedIds = array_map(fn($r) => (int)$r['club_id'], $relegated);
+
+        $direct = array_values(array_filter($standings, fn($r) => !in_array((int)$r['club_id'], $promotedIds, true) && !in_array((int)$r['club_id'], $relegatedIds, true)));
+
+        $upperCompetition = !empty($competition['parent_competition_id'])
+            ? $this->db->fetchOne("SELECT * FROM competitions WHERE id = ?", [(int)$competition['parent_competition_id']])
+            : null;
+
+        $lowerCompetition = $this->db->fetchOne(
+            "SELECT * FROM competitions
+             WHERE parent_competition_id = ?
+             ORDER BY id ASC LIMIT 1",
+            [(int)$competition['id']]
+        );
+
+        return [
+            'ok' => true,
+            'season_id' => $seasonId,
+            'competition_id' => (int)$competition['id'],
+            'promotion_slots' => $promotionSlots,
+            'relegation_slots' => $relegationSlots,
+            'promoted' => $promoted,
+            'relegated' => $relegated,
+            'direct' => $direct,
+            'upper_competition_id' => (int)($upperCompetition['id'] ?? 0),
+            'lower_competition_id' => (int)($lowerCompetition['id'] ?? 0),
+        ];
+    }
+
+    public function applyRollover(int $seasonId, bool $autoCreateSeasons = true): array {
+        $finalized = $this->db->fetchOne("SELECT * FROM season_rollover_logs WHERE season_id = ?", [$seasonId]);
+        if (!$finalized) {
+            return ['ok' => false, 'error' => 'Season must be finalized before applying rollover.'];
+        }
+        if (($finalized['status'] ?? '') === 'APPLIED') {
+            return ['ok' => false, 'error' => 'Rollover has already been applied for this season.'];
+        }
+
+        $plan = $this->previewRollover($seasonId);
+        if (!($plan['ok'] ?? false)) {
+            return ['ok' => false, 'error' => $plan['error'] ?? 'Unable to prepare rollover plan.'];
+        }
+
+        $season = $this->db->fetchOne("SELECT * FROM seasons WHERE id = ?", [$seasonId]);
+        $competition = $this->db->fetchOne("SELECT * FROM competitions WHERE id = ?", [(int)$season['competition_id']]);
+
+        $this->db->beginTransaction();
+        try {
+            $currentNextSeasonId = $this->resolveOrCreateNextSeason((int)$competition['id'], $season, $autoCreateSeasons);
+            $this->applyAssignmentsToSeason($currentNextSeasonId, $plan['direct'], 'direct');
+
+            if (!empty($plan['upper_competition_id']) && !empty($plan['promoted'])) {
+                $upperSeasonId = $this->resolveOrCreateNextSeason((int)$plan['upper_competition_id'], $season, $autoCreateSeasons);
+                $this->applyAssignmentsToSeason($upperSeasonId, $plan['promoted'], 'promoted');
+            }
+
+            if (!empty($plan['lower_competition_id']) && !empty($plan['relegated'])) {
+                $lowerSeasonId = $this->resolveOrCreateNextSeason((int)$plan['lower_competition_id'], $season, $autoCreateSeasons);
+                $this->applyAssignmentsToSeason($lowerSeasonId, $plan['relegated'], 'relegated');
+            }
+
+            $this->db->execute(
+                "UPDATE season_rollover_logs SET status = 'APPLIED', applied_at = NOW() WHERE season_id = ?",
+                [$seasonId]
+            );
+
+            $this->db->commit();
+            return ['ok' => true, 'plan' => $plan];
+        } catch (Throwable $e) {
+            $this->db->rollBack();
+            return ['ok' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    private function applyAssignmentsToSeason(int $targetSeasonId, array $rows, string $entryType): void {
+        $existing = (int)($this->db->fetchOne("SELECT COUNT(*) AS c FROM club_seasons WHERE season_id = ?", [$targetSeasonId])['c'] ?? 0);
+        if ($existing > 0) {
+            throw new RuntimeException('Target next-season already has manual participant assignments. Rollover apply is blocked for safety.');
+        }
+
+        foreach ($rows as $row) {
+            $clubId = (int)$row['club_id'];
+            $dup = $this->db->fetchOne(
+                "SELECT id FROM club_seasons WHERE season_id = ? AND club_id = ?",
+                [$targetSeasonId, $clubId]
+            );
+            if ($dup) {
+                continue;
+            }
+            $this->db->insert('club_seasons', [
+                'season_id' => $targetSeasonId,
+                'club_id' => $clubId,
+                'entry_type' => $entryType,
+            ]);
+        }
+    }
+
+    private function resolveOrCreateNextSeason(int $competitionId, array $sourceSeason, bool $autoCreate): int {
+        $existing = $this->db->fetchOne(
+            "SELECT id FROM seasons
+             WHERE competition_id = ? AND start_date > ?
+             ORDER BY start_date ASC LIMIT 1",
+            [$competitionId, $sourceSeason['start_date']]
+        );
+        if ($existing) {
+            return (int)$existing['id'];
+        }
+
+        if (!$autoCreate) {
+            throw new RuntimeException('No next season exists for target competition.');
+        }
+
+        $start = (new DateTimeImmutable((string)$sourceSeason['start_date']))->modify('+1 year');
+        $end = (new DateTimeImmutable((string)$sourceSeason['end_date']))->modify('+1 year');
+        $name = trim((string)$sourceSeason['name']) . ' Next';
+
+        return (int)$this->db->insert('seasons', [
+            'competition_id' => $competitionId,
+            'name' => $name,
+            'start_date' => $start->format('Y-m-d'),
+            'end_date' => $end->format('Y-m-d'),
+            'status' => 'UPCOMING',
+            'current_week' => 0,
+        ]);
+    }
+
+    private function getOrderedStandings(int $seasonId): array {
+        return $this->db->fetchAll(
+            "SELECT s.*, c.name AS club_name
+             FROM standings s
+             JOIN clubs c ON c.id = s.club_id
+             WHERE s.season_id = ?
+             ORDER BY s.points DESC, s.goal_diff DESC, s.goals_for DESC, s.club_id ASC",
+            [$seasonId]
+        );
+    }
+
     public function getFixturesBySeason(int $seasonId): array {
         return $this->db->fetchAll(
             "SELECT m.*, hc.name AS home_club_name, ac.name AS away_club_name
@@ -335,5 +564,21 @@ class AdminCompetitionService {
             [$seasonId]
         );
         return array_map(fn($r) => (int)$r['club_id'], $rows);
+    }
+
+    private function ensureRolloverTable(): void {
+        $this->db->execute(
+            "CREATE TABLE IF NOT EXISTS season_rollover_logs (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                season_id INT NOT NULL,
+                competition_id INT NOT NULL,
+                status ENUM('FINALIZED','APPLIED') DEFAULT 'FINALIZED',
+                finalized_standings_json JSON,
+                rollover_plan_json JSON,
+                finalized_at DATETIME NOT NULL,
+                applied_at DATETIME,
+                UNIQUE KEY uniq_season_rollover (season_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
     }
 }

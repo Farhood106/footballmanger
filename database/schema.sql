@@ -239,6 +239,23 @@ CREATE TABLE standings (
     INDEX idx_position (season_id, position)
 ) ENGINE=InnoDB;
 
+
+
+-- Season rollover logs for finalized standings and applied carryover plans
+CREATE TABLE IF NOT EXISTS season_rollover_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    season_id INT NOT NULL,
+    competition_id INT NOT NULL,
+    status ENUM('FINALIZED','APPLIED') DEFAULT 'FINALIZED',
+    finalized_standings_json JSON,
+    rollover_plan_json JSON,
+    finalized_at DATETIME NOT NULL,
+    applied_at DATETIME,
+    FOREIGN KEY (season_id) REFERENCES seasons(id) ON DELETE CASCADE,
+    FOREIGN KEY (competition_id) REFERENCES competitions(id) ON DELETE CASCADE,
+    UNIQUE KEY uniq_season_rollover (season_id)
+) ENGINE=InnoDB;
+
 -- Matches
 CREATE TABLE matches (
     id INT AUTO_INCREMENT PRIMARY KEY,

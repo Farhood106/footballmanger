@@ -97,6 +97,20 @@ class AdminCompetitionController extends Controller {
         $this->renderBack($result);
     }
 
+
+    public function finalizeSeason(int $id): void {
+        $this->requireAuth();
+        $this->requireAdmin();
+        $this->renderBack($this->service->finalizeSeason($id));
+    }
+
+    public function applyRollover(int $id): void {
+        $this->requireAuth();
+        $this->requireAdmin();
+        $result = $this->service->applyRollover($id, true);
+        $this->renderBack($result);
+    }
+
     public function fixtures(int $id): void {
         $this->requireAuth();
         $this->requireAdmin();
