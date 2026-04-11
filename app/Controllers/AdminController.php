@@ -63,7 +63,6 @@ class AdminController extends Controller {
             $this->setIfColumnExists($payload, $columns, 'stadium_capacity', $stadiumCapacity);
             $this->setIfColumnExists($payload, $columns, 'reputation', (int)($_POST['reputation'] ?? 50));
             $this->setIfColumnExists($payload, $columns, 'balance', (int)($_POST['balance'] ?? 10000000));
-            $this->setIfColumnExists($payload, $columns, 'budget', (int)($_POST['balance'] ?? 10000000));
 
             if (empty($payload)) {
                 $this->view('admin/create-club', ['error' => 'ستون‌های مورد نیاز برای ثبت باشگاه در دیتابیس پیدا نشد.']);
@@ -126,7 +125,6 @@ class AdminController extends Controller {
             $this->setIfColumnExists($payload, $columns, 'defending', (int)($_POST['defending'] ?? 60));
             $this->setIfColumnExists($payload, $columns, 'physical', (int)($_POST['physical'] ?? 60));
             $this->setIfColumnExists($payload, $columns, 'overall', (int)($_POST['overall'] ?? 60));
-            $this->setIfColumnExists($payload, $columns, 'overall_rating', (int)($_POST['overall'] ?? 60));
             $this->setIfColumnExists($payload, $columns, 'potential', (int)($_POST['potential'] ?? 75));
             $this->setIfColumnExists($payload, $columns, 'wage', (int)($_POST['wage'] ?? 0));
             $this->setIfColumnExists($payload, $columns, 'market_value', (int)($_POST['market_value'] ?? 0));

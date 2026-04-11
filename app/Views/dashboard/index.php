@@ -8,7 +8,7 @@
     </div>
 
     <div class="stat-box">
-        <h3><?= number_format($finances['budget']) ?> $</h3>
+        <h3><?= number_format($finances['balance'] ?? 0) ?> $</h3>
         <p>بودجه باشگاه</p>
     </div>
 

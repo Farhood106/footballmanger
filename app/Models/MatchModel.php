@@ -6,26 +6,20 @@ class MatchModel extends BaseModel {
 
     public function getScheduled(): array {
         return $this->db->fetchAll(
-            "SELECT m.*,
-                    hc.name AS home_club_name,
-                    ac.name AS away_club_name,
-                    comp.name AS competition_name
+            "SELECT m.*, hc.name AS home_club_name, ac.name AS away_club_name, comp.name AS competition_name
              FROM matches m
              JOIN clubs hc ON m.home_club_id = hc.id
              JOIN clubs ac ON m.away_club_id = ac.id
              JOIN seasons s ON m.season_id = s.id
              JOIN competitions comp ON s.competition_id = comp.id
-             WHERE m.status = 'SCHEDULED'
-               AND m.scheduled_at <= NOW()
+             WHERE m.status = 'SCHEDULED' AND m.scheduled_at <= NOW()
              ORDER BY m.scheduled_at ASC"
         );
     }
 
     public function getByClub(int $clubId, int $limit = 10): array {
         return $this->db->fetchAll(
-            "SELECT m.*,
-                    hc.name AS home_club_name,
-                    ac.name AS away_club_name
+            "SELECT m.*, hc.name AS home_club_name, ac.name AS away_club_name
              FROM matches m
              JOIN clubs hc ON m.home_club_id = hc.id
              JOIN clubs ac ON m.away_club_id = ac.id
@@ -39,10 +33,7 @@ class MatchModel extends BaseModel {
 
     public function getUpcoming(int $clubId, int $limit = 5): array {
         return $this->db->fetchAll(
-            "SELECT m.*,
-                    hc.name AS home_club_name,
-                    ac.name AS away_club_name,
-                    comp.name AS competition_name
+            "SELECT m.*, hc.name AS home_club_name, ac.name AS away_club_name, comp.name AS competition_name
              FROM matches m
              JOIN clubs hc ON m.home_club_id = hc.id
              JOIN clubs ac ON m.away_club_id = ac.id
@@ -61,16 +52,18 @@ class MatchModel extends BaseModel {
         if (!$match) return null;
 
         $match['events'] = $this->db->fetchAll(
-            "SELECT me.*, p.name AS player_name
+            "SELECT me.*, CONCAT(p.first_name, ' ', p.last_name) AS player_name,
+                    CONCAT(ap.first_name, ' ', ap.last_name) AS secondary_player_name
              FROM match_events me
              LEFT JOIN players p ON me.player_id = p.id
+             LEFT JOIN players ap ON me.assist_player_id = ap.id
              WHERE me.match_id = ?
              ORDER BY me.minute ASC",
             [$matchId]
         );
 
         $match['ratings'] = $this->db->fetchAll(
-            "SELECT pmr.*, p.name AS player_name, p.position
+            "SELECT pmr.*, CONCAT(p.first_name, ' ', p.last_name) AS player_name, p.position
              FROM player_match_ratings pmr
              JOIN players p ON pmr.player_id = p.id
              WHERE pmr.match_id = ?
@@ -83,20 +76,19 @@ class MatchModel extends BaseModel {
 
     public function scheduleMatch(int $seasonId, int $homeId, int $awayId, int $week, string $scheduledAt): int {
         return $this->create([
-            'season_id'      => $seasonId,
-            'home_club_id'   => $homeId,
-            'away_club_id'   => $awayId,
-            'week'           => $week,
-            'scheduled_at'   => $scheduledAt,
-            'status'         => 'SCHEDULED'
+            'season_id' => $seasonId,
+            'home_club_id' => $homeId,
+            'away_club_id' => $awayId,
+            'week' => $week,
+            'scheduled_at' => $scheduledAt,
+            'status' => 'SCHEDULED'
         ]);
     }
 
     public function getHeadToHead(int $clubA, int $clubB, int $limit = 10): array {
         return $this->db->fetchAll(
             "SELECT * FROM matches
-             WHERE ((home_club_id = ? AND away_club_id = ?)
-                OR  (home_club_id = ? AND away_club_id = ?))
+             WHERE ((home_club_id = ? AND away_club_id = ?) OR (home_club_id = ? AND away_club_id = ?))
                AND status = 'FINISHED'
              ORDER BY scheduled_at DESC
              LIMIT ?",

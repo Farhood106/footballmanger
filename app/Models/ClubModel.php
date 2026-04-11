@@ -6,9 +6,7 @@ class ClubModel extends BaseModel {
 
     public function getWithDetails(int $clubId): ?array {
         return $this->db->fetchOne(
-            "SELECT c.*,
-                    owner.username AS owner_name,
-                    manager.username AS manager_name
+            "SELECT c.*, owner.username AS owner_name, manager.username AS manager_name
              FROM clubs c
              LEFT JOIN users owner ON c.owner_user_id = owner.id
              LEFT JOIN users manager ON c.manager_user_id = manager.id
@@ -19,7 +17,7 @@ class ClubModel extends BaseModel {
 
     public function getSquad(int $clubId): array {
         return $this->db->fetchAll(
-            "SELECT p.*,
+            "SELECT p.*, CONCAT(p.first_name, ' ', p.last_name) AS full_name,
                     GROUP_CONCAT(a.code) AS abilities
              FROM players p
              LEFT JOIN player_abilities pa ON p.id = pa.player_id AND pa.is_active = 1
@@ -31,31 +29,33 @@ class ClubModel extends BaseModel {
         );
     }
 
-    public function getStartingXI(int $clubId): array {
+    public function getStartingXI(int $clubId, string $phaseKey = 'MATCH_1'): array {
         return $this->db->fetchAll(
-            "SELECT p.*, tl.position_slot
+            "SELECT p.*, CONCAT(p.first_name, ' ', p.last_name) AS full_name, tl.position_slot
              FROM tactic_lineups tl
              JOIN players p ON tl.player_id = p.id
-             JOIN tactics t ON tl.tactic_id = t.id
-             WHERE t.club_id = ? AND t.is_active = 1
+             WHERE tl.club_id = ? AND tl.phase_key = ? AND tl.is_active = 1
              ORDER BY tl.position_slot",
-            [$clubId]
+            [$clubId, $phaseKey]
         );
     }
 
     public function getFinances(int $clubId): ?array {
         return $this->db->fetchOne(
-            "SELECT * FROM finances WHERE club_id = ? ORDER BY date DESC LIMIT 1",
+            "SELECT c.balance,
+                    COALESCE(SUM(CASE WHEN l.amount > 0 THEN l.amount ELSE 0 END), 0) AS income_total,
+                    COALESCE(SUM(CASE WHEN l.amount < 0 THEN l.amount ELSE 0 END), 0) AS expense_total
+             FROM clubs c
+             LEFT JOIN club_finance_ledger l ON c.id = l.club_id
+             WHERE c.id = ?
+             GROUP BY c.id, c.balance",
             [$clubId]
         );
     }
 
     public function getStanding(int $clubId, int $seasonId): ?array {
         return $this->db->fetchOne(
-            "SELECT s.*, 
-                    (s.goals_for - s.goals_against) AS goal_diff
-             FROM standings s
-             WHERE s.club_id = ? AND s.season_id = ?",
+            "SELECT s.* FROM standings s WHERE s.club_id = ? AND s.season_id = ?",
             [$clubId, $seasonId]
         );
     }

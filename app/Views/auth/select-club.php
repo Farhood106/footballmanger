@@ -8,7 +8,7 @@
         <?php foreach ($clubs as $club): ?>
         <?php
             $leagueLabel = $club['league'] ?? ($club['country'] ?? 'نامشخص');
-            $budgetValue = $club['budget'] ?? ($club['balance'] ?? 0);
+            $budgetValue = $club['balance'] ?? 0;
             $reputation = (int)($club['reputation'] ?? 50);
         ?>
         <div class="card">

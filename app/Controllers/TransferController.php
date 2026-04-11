@@ -40,15 +40,15 @@ class TransferController extends Controller {
             $this->json(['error' => 'اطلاعات نامعتبر'], 400);
         }
 
+        $clubId = $this->getClubId();
         $player = $this->playerModel->find($playerId);
-        if (!$player || !$player['is_transfer_listed']) {
+        if (!$player || (int)$player['club_id'] === 0 || (int)$player['club_id'] === $clubId) {
             $this->json(['error' => 'بازیکن در دسترس نیست'], 400);
         }
 
-        $clubId = $this->getClubId();
         $club = $this->clubModel->find($clubId);
 
-        if ($club['budget'] < $amount) {
+        if (($club['balance'] ?? 0) < $amount) {
             $this->json(['error' => 'بودجه کافی ندارید'], 400);
         }
 

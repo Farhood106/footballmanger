@@ -4,7 +4,6 @@
 class PlayerModel extends BaseModel {
     protected string $table = 'players';
 
-    // وزن ویژگی‌ها بر اساس پوزیشن
     private array $positionWeights = [
         'GK'  => ['pace'=>5, 'shooting'=>2, 'passing'=>10, 'dribbling'=>5, 'defending'=>30, 'physical'=>20, 'goalkeeping'=>28],
         'CB'  => ['pace'=>10,'shooting'=>5, 'passing'=>10, 'dribbling'=>5, 'defending'=>40, 'physical'=>20, 'goalkeeping'=>10],
@@ -23,6 +22,7 @@ class PlayerModel extends BaseModel {
         $player = $this->find($playerId);
         if (!$player) return null;
 
+        $player['full_name'] = $this->buildFullName($player);
         $player['abilities'] = $this->db->fetchAll(
             "SELECT a.* FROM player_abilities pa
              JOIN abilities a ON pa.ability_id = a.id
@@ -47,38 +47,38 @@ class PlayerModel extends BaseModel {
 
     public function getAvailableForTransfer(int $excludeClubId = 0): array {
         return $this->db->fetchAll(
-            "SELECT p.*, c.name AS club_name
+            "SELECT p.*, CONCAT(p.first_name, ' ', p.last_name) AS full_name, c.name AS club_name
              FROM players p
              LEFT JOIN clubs c ON p.club_id = c.id
-             WHERE p.is_transfer_listed = 1
-               AND p.club_id != ?
-               AND p.is_active = 1
-             ORDER BY p.overall_rating DESC",
+             WHERE p.club_id != ?
+               AND p.is_retired = 0
+               AND p.contract_end IS NOT NULL
+             ORDER BY p.overall DESC",
             [$excludeClubId]
         );
     }
 
     public function updateCondition(int $playerId, array $data): bool {
-        $allowed = ['form', 'fatigue', 'morale', 'is_injured'];
+        $allowed = ['form', 'fatigue', 'morale', 'is_injured', 'injury_days'];
         $update = array_intersect_key($data, array_flip($allowed));
         return $this->update($playerId, $update);
     }
 
     public function recoverFatigue(int $clubId, int $amount = 10): void {
         $this->db->query(
-            "UPDATE players 
+            "UPDATE players
              SET fatigue = GREATEST(0, fatigue - ?)
-             WHERE club_id = ? AND is_active = 1",
+             WHERE club_id = ? AND is_retired = 0",
             [$amount, $clubId]
         );
     }
 
     public function getInjured(int $clubId): array {
         return $this->db->fetchAll(
-            "SELECT p.*, i.return_date, i.severity
+            "SELECT p.*, i.type AS injury_type, i.severity, i.recovered_at
              FROM players p
              JOIN injuries i ON p.id = i.player_id
-             WHERE p.club_id = ? AND p.is_injured = 1 AND i.is_recovered = 0",
+             WHERE p.club_id = ? AND p.is_injured = 1 AND i.recovered_at IS NULL",
             [$clubId]
         );
     }
@@ -93,14 +93,18 @@ class PlayerModel extends BaseModel {
 
     public function getCareerStats(int $playerId): array {
         return $this->db->fetchOne(
-            "SELECT 
+            "SELECT
                 SUM(goals) AS career_goals,
                 SUM(assists) AS career_assists,
                 SUM(appearances) AS career_apps,
-                AVG(average_rating) AS career_rating
+                AVG(avg_rating) AS career_rating
              FROM player_season_stats
              WHERE player_id = ?",
             [$playerId]
         ) ?? [];
+    }
+
+    private function buildFullName(array $player): string {
+        return trim(($player['first_name'] ?? '') . ' ' . ($player['last_name'] ?? ''));
     }
 }
