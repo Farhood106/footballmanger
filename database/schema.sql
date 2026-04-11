@@ -179,11 +179,20 @@ CREATE TABLE player_abilities (
 -- Competitions
 CREATE TABLE competitions (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    parent_competition_id INT,
+    code VARCHAR(50),
     name VARCHAR(255) NOT NULL,
-    type ENUM('LEAGUE','CUP','CHAMPIONS_LEAGUE','FRIENDLY') NOT NULL,
+    type ENUM('LEAGUE','CUP','SUPER_CUP','CHAMPIONS_LEAGUE','FRIENDLY') NOT NULL,
     country VARCHAR(100),
     level INT DEFAULT 1,
-    teams_count INT DEFAULT 20
+    teams_count INT DEFAULT 20,
+    promotion_slots INT DEFAULT 0,
+    relegation_slots INT DEFAULT 0,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (parent_competition_id) REFERENCES competitions(id) ON DELETE SET NULL,
+    UNIQUE KEY uniq_competition_code (code)
 ) ENGINE=InnoDB;
 
 -- Seasons

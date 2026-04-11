@@ -91,5 +91,15 @@ $router->post('/admin/clubs/create', 'AdminController@storeClub');
 $router->get('/admin/players/create', 'AdminController@createPlayerForm');
 $router->post('/admin/players/create', 'AdminController@storePlayer');
 
+$router->get('/admin/competitions', 'AdminCompetitionController@index');
+$router->post('/admin/competitions/create', 'AdminCompetitionController@createCompetition');
+$router->post('/admin/competitions/{id}/update', 'AdminCompetitionController@updateCompetition');
+$router->post('/admin/competitions/{id}/toggle', 'AdminCompetitionController@toggleCompetition');
+$router->post('/admin/seasons/create', 'AdminCompetitionController@createSeason');
+$router->post('/admin/seasons/{id}/start', 'AdminCompetitionController@startSeason');
+$router->post('/admin/seasons/{id}/end', 'AdminCompetitionController@endSeason');
+$router->post('/admin/seasons/{id}/fixtures/generate', 'AdminCompetitionController@generateFixtures');
+$router->get('/admin/seasons/{id}/fixtures', 'AdminCompetitionController@fixtures');
+
 // Dispatch request
 $router->dispatch();
