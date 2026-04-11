@@ -539,15 +539,48 @@ CREATE TABLE IF NOT EXISTS club_finance_ledger (
     id INT AUTO_INCREMENT PRIMARY KEY,
     club_id INT NOT NULL,
     season_id INT,
-    entry_type ENUM('TRANSFER_IN','TRANSFER_OUT','WAGE','STAFF_WAGE','SPONSOR','TICKET','PRIZE','PENALTY','OTHER') NOT NULL,
+    entry_type ENUM('COACH_SALARY','MATCH_REWARD','SEASON_REWARD','GOVERNANCE_PENALTY','GOVERNANCE_COMPENSATION','TRANSFER_IN','TRANSFER_OUT','OWNER_FUNDING','SPONSOR_INCOME','MANUAL_ADMIN_ADJUSTMENT','WAGE','STAFF_WAGE','SPONSOR','TICKET','PRIZE','PENALTY','OTHER') NOT NULL,
     amount BIGINT NOT NULL,
     description VARCHAR(500),
     reference_type VARCHAR(50),
     reference_id INT,
+    meta_json JSON,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
     FOREIGN KEY (season_id) REFERENCES seasons(id) ON DELETE SET NULL,
     INDEX idx_finance_club_date (club_id, created_at)
+) ENGINE=InnoDB;
+
+
+
+-- Club sponsors (sponsorship-ready foundation)
+CREATE TABLE IF NOT EXISTS club_sponsors (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    club_id INT NOT NULL,
+    tier ENUM('main','secondary','minor') DEFAULT 'minor',
+    brand_name VARCHAR(255) NOT NULL,
+    description TEXT,
+    contact_link VARCHAR(500),
+    banner_url VARCHAR(500),
+    is_active BOOLEAN DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
+    INDEX idx_club_sponsor_tier (club_id, tier)
+) ENGINE=InnoDB;
+
+-- Owner funding events (payment-verification-ready)
+CREATE TABLE IF NOT EXISTS club_owner_funding_events (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    club_id INT NOT NULL,
+    owner_user_id INT NOT NULL,
+    amount BIGINT NOT NULL,
+    note VARCHAR(500),
+    external_reference VARCHAR(255),
+    status ENUM('posted','pending','rejected') DEFAULT 'posted',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
+    FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_owner_funding_club_date (club_id, created_at)
 ) ENGINE=InnoDB;
 
 -- Daily cycle snapshots for scheduler observability/replay

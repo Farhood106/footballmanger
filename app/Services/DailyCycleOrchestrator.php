@@ -30,6 +30,8 @@ class DailyCycleOrchestrator {
         );
 
         $states = $this->initializeClubStates($cycleDate);
+        $finance = new FinanceService($this->db);
+        $salaryPosting = $finance->postCoachSalariesForCycle($cycleDate);
 
         $result = [
             'executed_at' => $at->format('Y-m-d H:i:s'),
@@ -40,6 +42,7 @@ class DailyCycleOrchestrator {
             'locks' => [],
             'club_states' => [],
             'ai_preparation' => [],
+            'salary_postings' => $salaryPosting['posted'] ?? 0,
         ];
 
         foreach ($states as $state) {

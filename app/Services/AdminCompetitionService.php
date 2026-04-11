@@ -326,6 +326,7 @@ class AdminCompetitionService {
         $standings = $this->getOrderedStandings($seasonId);
         $preview = $this->previewRollover($seasonId);
 
+        $finance = new FinanceService($this->db);
         $this->db->beginTransaction();
         try {
             $this->db->insert('season_rollover_logs', [
@@ -428,6 +429,18 @@ class AdminCompetitionService {
             if (!empty($plan['lower_competition_id']) && !empty($plan['relegated'])) {
                 $lowerSeasonId = $this->resolveOrCreateNextSeason((int)$plan['lower_competition_id'], $season, $autoCreateSeasons);
                 $this->applyAssignmentsToSeason($lowerSeasonId, $plan['relegated'], 'relegated');
+            }
+
+            if (!empty($plan['promoted'])) {
+                foreach ($plan['promoted'] as $club) {
+                    $finance->postSeasonReward((int)$club['club_id'], $seasonId, 250000, 'Promotion reward');
+                }
+            }
+            if (!empty($plan['direct'])) {
+                $champion = $plan['direct'][0] ?? null;
+                if ($champion) {
+                    $finance->postSeasonReward((int)$champion['club_id'], $seasonId, 500000, 'Title reward');
+                }
             }
 
             $this->db->execute(

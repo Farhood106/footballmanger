@@ -42,6 +42,7 @@ class TransferModel extends BaseModel {
     }
 
     public function accept(int $transferId): bool {
+        $finance = new FinanceService($this->db);
         $this->db->beginTransaction();
         try {
             $transfer = $this->db->fetchOne(
@@ -60,15 +61,19 @@ class TransferModel extends BaseModel {
             );
 
             $this->db->query("UPDATE players SET club_id = ? WHERE id = ?", [$transfer['to_club_id'], $transfer['player_id']]);
-            $this->db->query("UPDATE clubs SET balance = balance - ? WHERE id = ?", [$transfer['fee'], $transfer['to_club_id']]);
 
-            if (!empty($transfer['from_club_id'])) {
-                $this->db->query("UPDATE clubs SET balance = balance + ? WHERE id = ?", [$transfer['fee'], $transfer['from_club_id']]);
+            $outPost = $finance->postEntry((int)$transfer['to_club_id'], 'TRANSFER_OUT', -1 * (int)$transfer['fee'], 'Transfer fee paid', null, 'TRANSFER', $transferId, [], false);
+            if (empty($outPost['ok'])) {
+                $this->db->rollBack();
+                return false;
             }
 
-            $this->writeLedgerOnce((int)$transfer['to_club_id'], 'TRANSFER_OUT', -1 * (int)$transfer['fee'], $transferId, 'Transfer fee paid');
             if (!empty($transfer['from_club_id'])) {
-                $this->writeLedgerOnce((int)$transfer['from_club_id'], 'TRANSFER_IN', (int)$transfer['fee'], $transferId, 'Transfer fee received');
+                $inPost = $finance->postEntry((int)$transfer['from_club_id'], 'TRANSFER_IN', (int)$transfer['fee'], 'Transfer fee received', null, 'TRANSFER', $transferId, [], false);
+                if (empty($inPost['ok'])) {
+                    $this->db->rollBack();
+                    return false;
+                }
             }
 
             $this->db->commit();
@@ -81,27 +86,5 @@ class TransferModel extends BaseModel {
 
     public function reject(int $transferId): bool {
         return $this->update($transferId, ['status' => 'REJECTED']);
-    }
-
-    private function writeLedgerOnce(int $clubId, string $entryType, int $amount, int $transferId, string $description): void {
-        $exists = $this->db->fetchOne(
-            "SELECT id FROM club_finance_ledger
-             WHERE club_id = ? AND entry_type = ? AND reference_type = 'TRANSFER' AND reference_id = ?
-             LIMIT 1",
-            [$clubId, $entryType, $transferId]
-        );
-
-        if ($exists) {
-            return;
-        }
-
-        $this->db->insert('club_finance_ledger', [
-            'club_id' => $clubId,
-            'entry_type' => $entryType,
-            'amount' => $amount,
-            'description' => $description,
-            'reference_type' => 'TRANSFER',
-            'reference_id' => $transferId,
-        ]);
     }
 }

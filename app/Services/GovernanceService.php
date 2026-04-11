@@ -125,6 +125,7 @@ class GovernanceService {
             return ['ok' => false, 'error' => 'Decision summary is required.'];
         }
 
+        $finance = new FinanceService($this->db); // routes postings into club_finance_ledger
         $this->db->beginTransaction();
         try {
             $case = $this->db->fetchOne("SELECT * FROM club_governance_cases WHERE id = ? FOR UPDATE", [$caseId]);
@@ -158,15 +159,20 @@ class GovernanceService {
 
             $effects = self::ledgerEffects(max(0, $penaltyAmount), max(0, $compensationAmount));
             foreach ($effects as $effect) {
-                $this->db->insert('club_finance_ledger', [
-                    'club_id' => (int)$case['club_id'],
-                    'entry_type' => $effect['entry_type'],
-                    'amount' => $effect['amount'],
-                    'description' => $effect['description'] . ' (Governance case #' . $caseId . ')',
-                    'reference_type' => 'GOVERNANCE_CASE',
-                    'reference_id' => $caseId,
-                ]);
-                $this->db->execute("UPDATE clubs SET balance = balance + ? WHERE id = ?", [$effect['amount'], (int)$case['club_id']]);
+                $posted = $finance->postEntry(
+                    (int)$case['club_id'],
+                    $effect['entry_type'],
+                    $effect['amount'],
+                    $effect['description'] . ' (Governance case #' . $caseId . ')',
+                    null,
+                    'GOVERNANCE_CASE',
+                    $caseId,
+                    [],
+                    false
+                );
+                if (empty($posted['ok'])) {
+                    throw new RuntimeException($posted['error'] ?? 'Finance posting failed.');
+                }
             }
 
             $this->db->commit();
@@ -186,7 +192,7 @@ class GovernanceService {
 
         if ($penaltyAmount > 0) {
             $effects[] = [
-                'entry_type' => 'PENALTY',
+                'entry_type' => 'GOVERNANCE_PENALTY',
                 'amount' => -1 * $penaltyAmount,
                 'description' => 'Governance penalty'
             ];
@@ -194,7 +200,7 @@ class GovernanceService {
 
         if ($compensationAmount > 0) {
             $effects[] = [
-                'entry_type' => 'OTHER',
+                'entry_type' => 'GOVERNANCE_COMPENSATION',
                 'amount' => -1 * $compensationAmount,
                 'description' => 'Governance compensation payment'
             ];

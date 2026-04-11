@@ -24,6 +24,11 @@
 
 </div>
 
+
+<div class="card">
+    <a class="btn" href="/finance">Finance Ledger & Funding</a>
+</div>
+
 <div class="card">
     <h2>بازی‌های پیش‌رو</h2>
     <?php if (empty($upcoming)): ?>

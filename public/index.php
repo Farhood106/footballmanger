@@ -81,6 +81,14 @@ $router->post('/manager/offers/{id}/reject', 'ManagerHiringController@respondOff
 $router->post('/manager/offers/{id}/counter', 'ManagerHiringController@respondOfferCounter');
 
 
+
+// Finance
+$router->get('/finance', 'FinanceController@index');
+$router->post('/finance/owner-funding', 'FinanceController@ownerFunding');
+$router->post('/finance/sponsors/add', 'FinanceController@addSponsor');
+$router->post('/finance/sponsors/income', 'FinanceController@sponsorIncome');
+$router->post('/finance/admin-adjust', 'FinanceController@manualAdjust');
+
 // Governance
 $router->get('/governance/cases', 'GovernanceController@index');
 $router->get('/governance/cases/new', 'GovernanceController@createForm');
