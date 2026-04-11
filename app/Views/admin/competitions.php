@@ -64,13 +64,15 @@
 
     <h4>Seasons</h4>
     <table class="table">
-        <thead><tr><th>Name</th><th>Dates</th><th>Status</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Name</th><th>Dates</th><th>Status</th><th>Participants</th><th>Actions</th></tr></thead>
         <tbody>
         <?php foreach (($c['seasons'] ?? []) as $s): ?>
+            <?php $participants = $s['participants'] ?? []; ?>
             <tr>
                 <td><?= htmlspecialchars($s['name']) ?></td>
                 <td><?= htmlspecialchars($s['start_date']) ?> → <?= htmlspecialchars($s['end_date']) ?></td>
                 <td><?= htmlspecialchars($s['status']) ?></td>
+                <td><?= count($participants) ?> / <?= (int)$c['teams_count'] ?></td>
                 <td>
                     <form method="post" action="/admin/seasons/<?= (int)$s['id'] ?>/start" style="display:inline-block;"><button class="btn">Start</button></form>
                     <form method="post" action="/admin/seasons/<?= (int)$s['id'] ?>/end" style="display:inline-block;"><button class="btn">End</button></form>
@@ -78,8 +80,56 @@
                     <a class="btn" href="/admin/seasons/<?= (int)$s['id'] ?>/fixtures">View Fixtures</a>
                 </td>
             </tr>
+            <tr>
+                <td colspan="5">
+                    <strong>Participants:</strong>
+                    <table class="table" style="margin-top:8px;">
+                        <thead><tr><th>Club</th><th>Entry Type</th><th>Remove</th></tr></thead>
+                        <tbody>
+                        <?php foreach ($participants as $p): ?>
+                            <tr>
+                                <td><?= htmlspecialchars($p['club_name']) ?></td>
+                                <td><?= htmlspecialchars($p['entry_type'] ?? 'direct') ?></td>
+                                <td>
+                                    <form method="post" action="/admin/seasons/<?= (int)$s['id'] ?>/participants/<?= (int)$p['club_id'] ?>/remove" style="display:inline-block;">
+                                        <button class="btn" type="submit">Remove</button>
+                                    </form>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                        <?php if (empty($participants)): ?><tr><td colspan="3">No participants assigned.</td></tr><?php endif; ?>
+                        </tbody>
+                    </table>
+
+                    <form method="post" action="/admin/seasons/<?= (int)$s['id'] ?>/participants/add">
+                        <div class="grid">
+                            <div class="form-group">
+                                <label>Club</label>
+                                <select name="club_id" required>
+                                    <option value="">Select club</option>
+                                    <?php foreach (($clubs ?? []) as $club): ?>
+                                        <option value="<?= (int)$club['id'] ?>"><?= htmlspecialchars($club['name']) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Entry Type</label>
+                                <select name="entry_type">
+                                    <?php foreach (($entry_types ?? []) as $entryType): ?>
+                                        <option value="<?= htmlspecialchars($entryType) ?>"><?= htmlspecialchars($entryType) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>&nbsp;</label>
+                                <button class="btn" type="submit">Add Participant</button>
+                            </div>
+                        </div>
+                    </form>
+                </td>
+            </tr>
         <?php endforeach; ?>
-        <?php if (empty($c['seasons'])): ?><tr><td colspan="4">No seasons.</td></tr><?php endif; ?>
+        <?php if (empty($c['seasons'])): ?><tr><td colspan="5">No seasons.</td></tr><?php endif; ?>
         </tbody>
     </table>
 

@@ -212,9 +212,11 @@ CREATE TABLE club_seasons (
     id INT AUTO_INCREMENT PRIMARY KEY,
     club_id INT NOT NULL,
     season_id INT NOT NULL,
+    entry_type ENUM('direct','promoted','relegated','champion','qualified','wildcard') NOT NULL DEFAULT 'direct',
     FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
     FOREIGN KEY (season_id) REFERENCES seasons(id) ON DELETE CASCADE,
-    UNIQUE KEY unique_club_season (club_id, season_id)
+    UNIQUE KEY unique_club_season (club_id, season_id),
+    INDEX idx_season_entry_type (season_id, entry_type)
 ) ENGINE=InnoDB;
 
 -- Standings

@@ -4,6 +4,8 @@
 class AdminCompetitionService {
     private Database $db;
 
+    private const ENTRY_TYPES = ['direct', 'promoted', 'relegated', 'champion', 'qualified', 'wildcard'];
+
     public function __construct(?Database $db = null) {
         $this->db = $db ?? Database::getInstance();
     }
@@ -21,9 +23,22 @@ class AdminCompetitionService {
                 "SELECT * FROM seasons WHERE competition_id = ? ORDER BY start_date DESC",
                 [(int)$c['id']]
             );
+
+            foreach ($c['seasons'] as &$season) {
+                $season['participants'] = $this->getSeasonParticipants((int)$season['id']);
+            }
         }
 
         return $competitions;
+    }
+
+
+    public function listClubs(): array {
+        return $this->db->fetchAll("SELECT id, name FROM clubs ORDER BY name ASC");
+    }
+
+    public static function entryTypes(): array {
+        return self::ENTRY_TYPES;
     }
 
     public function createCompetition(array $data): array {
@@ -134,6 +149,72 @@ class AdminCompetitionService {
         return ['ok' => true];
     }
 
+    public function addSeasonParticipant(int $seasonId, int $clubId, string $entryType): array {
+        $season = $this->db->fetchOne("SELECT id FROM seasons WHERE id = ?", [$seasonId]);
+        if (!$season) return ['ok' => false, 'error' => 'Season not found.'];
+
+        $club = $this->db->fetchOne("SELECT id FROM clubs WHERE id = ?", [$clubId]);
+        if (!$club) return ['ok' => false, 'error' => 'Club not found.'];
+
+        $normalizedEntry = strtolower(trim($entryType));
+        if (!in_array($normalizedEntry, self::ENTRY_TYPES, true)) {
+            return ['ok' => false, 'error' => 'Invalid entry type.'];
+        }
+
+        $dup = $this->db->fetchOne(
+            "SELECT id FROM club_seasons WHERE season_id = ? AND club_id = ?",
+            [$seasonId, $clubId]
+        );
+        if ($dup) {
+            return ['ok' => false, 'error' => 'Club is already assigned to this season.'];
+        }
+
+        $this->db->insert('club_seasons', [
+            'season_id' => $seasonId,
+            'club_id' => $clubId,
+            'entry_type' => $normalizedEntry,
+        ]);
+
+        return ['ok' => true];
+    }
+
+    public function removeSeasonParticipant(int $seasonId, int $clubId): array {
+        $exists = $this->db->fetchOne(
+            "SELECT id FROM club_seasons WHERE season_id = ? AND club_id = ?",
+            [$seasonId, $clubId]
+        );
+        if (!$exists) {
+            return ['ok' => false, 'error' => 'Participant assignment not found.'];
+        }
+
+        $fixturesCount = (int)($this->db->fetchOne(
+            "SELECT COUNT(*) AS c FROM matches WHERE season_id = ?",
+            [$seasonId]
+        )['c'] ?? 0);
+
+        if ($fixturesCount > 0) {
+            return ['ok' => false, 'error' => 'Cannot remove participant after fixtures are generated.'];
+        }
+
+        $this->db->execute(
+            "DELETE FROM club_seasons WHERE season_id = ? AND club_id = ?",
+            [$seasonId, $clubId]
+        );
+
+        return ['ok' => true];
+    }
+
+    public function getSeasonParticipants(int $seasonId): array {
+        return $this->db->fetchAll(
+            "SELECT cs.club_id, cs.season_id, cs.entry_type, c.name AS club_name
+             FROM club_seasons cs
+             JOIN clubs c ON c.id = cs.club_id
+             WHERE cs.season_id = ?
+             ORDER BY c.name ASC",
+            [$seasonId]
+        );
+    }
+
     public function generateFixtures(int $seasonId, bool $regenerate = false): array {
         $season = $this->db->fetchOne("SELECT * FROM seasons WHERE id = ?", [$seasonId]);
         if (!$season) return ['ok' => false, 'error' => 'Season not found.'];
@@ -159,8 +240,19 @@ class AdminCompetitionService {
             return ['ok' => false, 'error' => 'Fixture generation is only available for league-style competitions in MVP.'];
         }
 
-        $clubIds = $this->resolveSeasonClubIds($seasonId, (int)$competition['teams_count']);
-        if (count($clubIds) < 2) {
+        $clubIds = $this->resolveSeasonClubIds($seasonId);
+        $assignedCount = count($clubIds);
+        $expectedCount = max(2, (int)$competition['teams_count']);
+
+        if ($assignedCount === 0) {
+            return ['ok' => false, 'error' => 'No explicit participants assigned to this season. Assign clubs before generating fixtures.'];
+        }
+
+        if ($assignedCount !== $expectedCount) {
+            return ['ok' => false, 'error' => "Participant count mismatch: expected {$expectedCount}, assigned {$assignedCount}. Update season participants first."];
+        }
+
+        if ($assignedCount < 2) {
             return ['ok' => false, 'error' => 'Not enough clubs for fixture generation.'];
         }
 
@@ -237,18 +329,11 @@ class AdminCompetitionService {
         return array_merge($rounds, $secondLegs);
     }
 
-    private function resolveSeasonClubIds(int $seasonId, int $targetCount): array {
-        $rows = $this->db->fetchAll("SELECT club_id FROM club_seasons WHERE season_id = ? ORDER BY club_id ASC", [$seasonId]);
-        $clubIds = array_map(fn($r) => (int)$r['club_id'], $rows);
-
-        if (empty($clubIds)) {
-            $fallback = $this->db->fetchAll("SELECT id FROM clubs ORDER BY id ASC LIMIT ?", [$targetCount]);
-            $clubIds = array_map(fn($r) => (int)$r['id'], $fallback);
-            foreach ($clubIds as $clubId) {
-                $this->db->insert('club_seasons', ['club_id' => $clubId, 'season_id' => $seasonId]);
-            }
-        }
-
-        return $clubIds;
+    private function resolveSeasonClubIds(int $seasonId): array {
+        $rows = $this->db->fetchAll(
+            "SELECT club_id FROM club_seasons WHERE season_id = ? ORDER BY club_id ASC",
+            [$seasonId]
+        );
+        return array_map(fn($r) => (int)$r['club_id'], $rows);
     }
 }

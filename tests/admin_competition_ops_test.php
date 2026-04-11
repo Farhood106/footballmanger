@@ -25,6 +25,10 @@ $mustContain = [
     'Another active season already exists for this competition.',
     'Fixtures already exist for this season.',
     "Cannot regenerate after live/finished matches.",
+    'No explicit participants assigned to this season. Assign clubs before generating fixtures.',
+    'Participant count mismatch: expected',
+    'Club is already assigned to this season.',
+    'Cannot remove participant after fixtures are generated.',
 ];
 foreach ($mustContain as $needle) {
     if (strpos($serviceCode, $needle) === false) {

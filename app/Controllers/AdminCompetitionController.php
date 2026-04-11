@@ -15,6 +15,8 @@ class AdminCompetitionController extends Controller {
 
         $this->view('admin/competitions', [
             'competitions' => $this->service->listCompetitionsWithSeasons(),
+            'clubs' => $this->service->listClubs(),
+            'entry_types' => AdminCompetitionService::entryTypes(),
         ]);
     }
 
@@ -76,6 +78,25 @@ class AdminCompetitionController extends Controller {
         $this->renderBack($result);
     }
 
+
+    public function addParticipant(int $seasonId): void {
+        $this->requireAuth();
+        $this->requireAdmin();
+
+        $clubId = (int)($_POST['club_id'] ?? 0);
+        $entryType = trim((string)($_POST['entry_type'] ?? 'direct'));
+        $result = $this->service->addSeasonParticipant($seasonId, $clubId, $entryType);
+        $this->renderBack($result);
+    }
+
+    public function removeParticipant(int $seasonId, int $clubId): void {
+        $this->requireAuth();
+        $this->requireAdmin();
+
+        $result = $this->service->removeSeasonParticipant($seasonId, $clubId);
+        $this->renderBack($result);
+    }
+
     public function fixtures(int $id): void {
         $this->requireAuth();
         $this->requireAdmin();
@@ -87,6 +108,8 @@ class AdminCompetitionController extends Controller {
     private function renderBack(array $result): void {
         $this->view('admin/competitions', [
             'competitions' => $this->service->listCompetitionsWithSeasons(),
+            'clubs' => $this->service->listClubs(),
+            'entry_types' => AdminCompetitionService::entryTypes(),
             'success' => $result['ok'] ? 'Operation completed.' : null,
             'error' => $result['ok'] ? null : ($result['error'] ?? 'Operation failed.')
         ]);
