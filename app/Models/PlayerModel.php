@@ -51,8 +51,9 @@ class PlayerModel extends BaseModel {
              FROM players p
              LEFT JOIN clubs c ON p.club_id = c.id
              WHERE p.club_id != ?
+               AND p.is_transfer_listed = 1
                AND p.is_retired = 0
-               AND p.contract_end IS NOT NULL
+               AND p.club_id IS NOT NULL
              ORDER BY p.overall DESC",
             [$excludeClubId]
         );

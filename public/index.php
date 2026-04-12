@@ -51,6 +51,7 @@ $router->get('/match/{id}', 'MatchController@detail');
 
 // Transfers
 $router->get('/transfers', 'TransferController@market');
+$router->post('/transfer/listing', 'TransferController@setListed');
 $router->post('/transfer/bid', 'TransferController@makeBid');
 $router->post('/transfer/accept/{id}', 'TransferController@acceptBid');
 $router->post('/transfer/reject/{id}', 'TransferController@rejectBid');

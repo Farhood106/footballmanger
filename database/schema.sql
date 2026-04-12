@@ -137,6 +137,9 @@ CREATE TABLE players (
     wage INT DEFAULT 0,
     contract_end DATE,
     market_value BIGINT DEFAULT 0,
+    is_transfer_listed BOOLEAN DEFAULT 0,
+    asking_price BIGINT DEFAULT NULL,
+    transfer_listed_at DATETIME NULL,
 
     is_injured BOOLEAN DEFAULT FALSE,
     injury_days INT DEFAULT 0,
@@ -381,13 +384,18 @@ CREATE TABLE transfers (
     fee BIGINT DEFAULT 0,
     status ENUM('PENDING','COMPLETED','CANCELLED','REJECTED') DEFAULT 'PENDING',
     initiated_by INT NOT NULL,
+    season_id INT,
     loan_end DATE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     completed_at DATETIME,
     FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
     FOREIGN KEY (from_club_id) REFERENCES clubs(id) ON DELETE SET NULL,
     FOREIGN KEY (to_club_id) REFERENCES clubs(id) ON DELETE SET NULL,
-    FOREIGN KEY (initiated_by) REFERENCES users(id) ON DELETE CASCADE
+    FOREIGN KEY (initiated_by) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (season_id) REFERENCES seasons(id) ON DELETE SET NULL,
+    INDEX idx_transfer_player_status (player_id, status),
+    INDEX idx_transfer_seller_status (from_club_id, status),
+    INDEX idx_transfer_buyer_status (to_club_id, status)
 ) ENGINE=InnoDB;
 
 -- Player Season Stats
