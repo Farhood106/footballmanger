@@ -6,6 +6,7 @@ class AIClubManagementService {
 
     public function __construct(?Database $db = null) {
         $this->db = $db ?? Database::getInstance();
+        $this->ensureControlRuntimeTable();
     }
 
     public static function determineControlState(array $club): array {
@@ -16,24 +17,28 @@ class AIClubManagementService {
         $hasManager = $managerId > 0;
 
         if ($hasOwner && $hasManager && $ownerId === $managerId) {
-            return ['key' => 'OWNER_SELF_MANAGED', 'is_ai_owner' => false, 'is_ai_manager' => false];
+            return ['key' => 'OWNER_SELF_MANAGED', 'is_ai_owner' => false, 'is_ai_manager' => false, 'is_caretaker' => false, 'owner_vacant' => false, 'manager_vacant' => false];
         }
         if ($hasOwner && $hasManager) {
-            return ['key' => 'HUMAN_OWNER_HUMAN_MANAGER', 'is_ai_owner' => false, 'is_ai_manager' => false];
+            return ['key' => 'HUMAN_OWNER_HUMAN_MANAGER', 'is_ai_owner' => false, 'is_ai_manager' => false, 'is_caretaker' => false, 'owner_vacant' => false, 'manager_vacant' => false];
         }
         if ($hasOwner && !$hasManager) {
-            return ['key' => 'HUMAN_OWNER_AI_MANAGER', 'is_ai_owner' => false, 'is_ai_manager' => true];
+            return ['key' => 'HUMAN_OWNER_CARETAKER', 'is_ai_owner' => false, 'is_ai_manager' => true, 'is_caretaker' => true, 'owner_vacant' => false, 'manager_vacant' => true];
         }
         if (!$hasOwner && $hasManager) {
-            return ['key' => 'AI_OWNER_HUMAN_MANAGER', 'is_ai_owner' => true, 'is_ai_manager' => false];
+            return ['key' => 'AI_OWNER_HUMAN_MANAGER', 'is_ai_owner' => true, 'is_ai_manager' => false, 'is_caretaker' => false, 'owner_vacant' => true, 'manager_vacant' => false];
         }
 
-        return ['key' => 'AI_OWNER_AI_MANAGER', 'is_ai_owner' => true, 'is_ai_manager' => true];
+        return ['key' => 'AI_OWNER_CARETAKER', 'is_ai_owner' => true, 'is_ai_manager' => true, 'is_caretaker' => true, 'owner_vacant' => true, 'manager_vacant' => true];
     }
 
     public function getClubControlState(int $clubId): array {
+        $this->syncClubVacancyState($clubId);
         $club = $this->db->fetchOne(
-            "SELECT id, name, owner_user_id, manager_user_id FROM clubs WHERE id = ?",
+            "SELECT c.id, c.name, c.owner_user_id, c.manager_user_id, r.owner_vacancy_since, r.manager_vacancy_since
+             FROM clubs c
+             LEFT JOIN club_control_runtime_states r ON r.club_id = c.id
+             WHERE c.id = ?",
             [$clubId]
         ) ?: ['id' => $clubId, 'name' => 'unknown', 'owner_user_id' => null, 'manager_user_id' => null];
 
@@ -42,12 +47,15 @@ class AIClubManagementService {
     }
 
     public function listClubControlStates(): array {
+        $this->syncVacancyStatesForAllClubs();
         $rows = $this->db->fetchAll(
             "SELECT c.id, c.name, c.owner_user_id, c.manager_user_id,
-                    o.username AS owner_name, m.username AS manager_name
+                    o.username AS owner_name, m.username AS manager_name,
+                    r.owner_vacancy_since, r.manager_vacancy_since
              FROM clubs c
              LEFT JOIN users o ON o.id = c.owner_user_id
              LEFT JOIN users m ON m.id = c.manager_user_id
+             LEFT JOIN club_control_runtime_states r ON r.club_id = c.id
              ORDER BY c.name ASC"
         );
 
@@ -56,7 +64,19 @@ class AIClubManagementService {
         }, $rows);
     }
 
+    public function syncVacancyStatesForAllClubs(): array {
+        $rows = $this->db->fetchAll("SELECT id FROM clubs ORDER BY id ASC");
+        $synced = 0;
+        foreach ($rows as $row) {
+            if ($this->syncClubVacancyState((int)$row['id'])) {
+                $synced++;
+            }
+        }
+        return ['ok' => true, 'synced' => $synced];
+    }
+
     public function applyDailyPreparation(int $clubId, string $cycleDate): array {
+        $this->syncClubVacancyState($clubId);
         $state = $this->getClubControlState($clubId);
         if (!$state['is_ai_manager']) {
             return ['ok' => true, 'mode' => 'human_managed_skip'];
@@ -209,5 +229,67 @@ class AIClubManagementService {
         }
 
         return null;
+    }
+
+    private function syncClubVacancyState(int $clubId): bool {
+        $club = $this->db->fetchOne(
+            "SELECT id, owner_user_id, manager_user_id FROM clubs WHERE id = ?",
+            [$clubId]
+        );
+        if (!$club) return false;
+
+        $state = self::determineControlState($club);
+        $existing = $this->db->fetchOne(
+            "SELECT owner_vacancy_since, manager_vacancy_since FROM club_control_runtime_states WHERE club_id = ?",
+            [$clubId]
+        );
+        $today = date('Y-m-d');
+        $ownerSince = !empty($state['owner_vacant']) ? (($existing['owner_vacancy_since'] ?? null) ?: $today) : null;
+        $managerSince = !empty($state['manager_vacant']) ? (($existing['manager_vacancy_since'] ?? null) ?: $today) : null;
+
+        $this->db->execute(
+            "INSERT INTO club_control_runtime_states
+                (club_id, state_key, ai_owner_active, caretaker_active, owner_vacant, manager_vacant, owner_vacancy_since, manager_vacancy_since, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
+             ON DUPLICATE KEY UPDATE
+                state_key = VALUES(state_key),
+                ai_owner_active = VALUES(ai_owner_active),
+                caretaker_active = VALUES(caretaker_active),
+                owner_vacant = VALUES(owner_vacant),
+                manager_vacant = VALUES(manager_vacant),
+                owner_vacancy_since = VALUES(owner_vacancy_since),
+                manager_vacancy_since = VALUES(manager_vacancy_since),
+                updated_at = NOW()",
+            [
+                $clubId,
+                (string)$state['key'],
+                !empty($state['is_ai_owner']) ? 1 : 0,
+                !empty($state['is_caretaker']) ? 1 : 0,
+                !empty($state['owner_vacant']) ? 1 : 0,
+                !empty($state['manager_vacant']) ? 1 : 0,
+                $ownerSince,
+                $managerSince
+            ]
+        );
+        return true;
+    }
+
+    private function ensureControlRuntimeTable(): void {
+        $this->db->execute(
+            "CREATE TABLE IF NOT EXISTS club_control_runtime_states (
+                club_id INT PRIMARY KEY,
+                state_key VARCHAR(64) NOT NULL,
+                ai_owner_active BOOLEAN DEFAULT 0,
+                caretaker_active BOOLEAN DEFAULT 0,
+                owner_vacant BOOLEAN DEFAULT 0,
+                manager_vacant BOOLEAN DEFAULT 0,
+                owner_vacancy_since DATE NULL,
+                manager_vacancy_since DATE NULL,
+                updated_at DATETIME NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
+                INDEX idx_runtime_vacancy (owner_vacant, manager_vacant, caretaker_active)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
     }
 }

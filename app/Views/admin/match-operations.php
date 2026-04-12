@@ -174,17 +174,25 @@
 <div class="card">
     <h3>Club Control States</h3>
     <table class="table">
-        <thead><tr><th>Club</th><th>Owner</th><th>Manager</th><th>Control State</th></tr></thead>
+        <thead><tr><th>Club</th><th>Owner</th><th>Manager</th><th>Control State</th><th>AI Owner</th><th>Caretaker</th><th>Owner Vacancy</th><th>Manager Vacancy</th></tr></thead>
         <tbody>
         <?php foreach (($control_states ?? []) as $state): ?>
+            <?php
+                $ownerVacancyDays = !empty($state['owner_vacancy_since']) ? max(0, (int)floor((time() - strtotime((string)$state['owner_vacancy_since'])) / 86400)) : null;
+                $managerVacancyDays = !empty($state['manager_vacancy_since']) ? max(0, (int)floor((time() - strtotime((string)$state['manager_vacancy_since'])) / 86400)) : null;
+            ?>
             <tr>
                 <td><?= htmlspecialchars((string)$state['name']) ?></td>
                 <td><?= htmlspecialchars((string)($state['owner_name'] ?? 'AI/System')) ?></td>
                 <td><?= htmlspecialchars((string)($state['manager_name'] ?? 'AI/System')) ?></td>
                 <td><?= htmlspecialchars((string)$state['key']) ?></td>
+                <td><?= !empty($state['is_ai_owner']) ? 'Yes' : 'No' ?></td>
+                <td><?= !empty($state['is_caretaker']) ? 'Yes' : 'No' ?></td>
+                <td><?= !empty($state['owner_vacant']) ? ('Yes (' . (int)$ownerVacancyDays . 'd)') : 'No' ?></td>
+                <td><?= !empty($state['manager_vacant']) ? ('Yes (' . (int)$managerVacancyDays . 'd)') : 'No' ?></td>
             </tr>
         <?php endforeach; ?>
-        <?php if (empty($control_states)): ?><tr><td colspan="4">No clubs found.</td></tr><?php endif; ?>
+        <?php if (empty($control_states)): ?><tr><td colspan="8">No clubs found.</td></tr><?php endif; ?>
         </tbody>
     </table>
 </div>

@@ -4,9 +4,9 @@ require_once __DIR__ . '/../app/Services/AIClubManagementService.php';
 $cases = [
     [['owner_user_id' => 10, 'manager_user_id' => 10], 'OWNER_SELF_MANAGED'],
     [['owner_user_id' => 10, 'manager_user_id' => 20], 'HUMAN_OWNER_HUMAN_MANAGER'],
-    [['owner_user_id' => 10, 'manager_user_id' => null], 'HUMAN_OWNER_AI_MANAGER'],
+    [['owner_user_id' => 10, 'manager_user_id' => null], 'HUMAN_OWNER_CARETAKER'],
     [['owner_user_id' => null, 'manager_user_id' => 20], 'AI_OWNER_HUMAN_MANAGER'],
-    [['owner_user_id' => null, 'manager_user_id' => null], 'AI_OWNER_AI_MANAGER'],
+    [['owner_user_id' => null, 'manager_user_id' => null], 'AI_OWNER_CARETAKER'],
 ];
 
 foreach ($cases as [$club, $expected]) {
@@ -27,8 +27,8 @@ $serviceNeedles = [
     'applyDailyPreparation',
     'Human-managed club lineup must not be overridden.',
     'AI manager could not build 11-player lineup.',
-    'AI_OWNER_AI_MANAGER',
-    'HUMAN_OWNER_AI_MANAGER',
+    'AI_OWNER_CARETAKER',
+    'HUMAN_OWNER_CARETAKER',
 ];
 foreach ($serviceNeedles as $needle) {
     if (strpos($serviceCode, $needle) === false) {
