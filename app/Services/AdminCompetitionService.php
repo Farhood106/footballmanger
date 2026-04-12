@@ -232,6 +232,7 @@ class AdminCompetitionService {
         }
 
         $inserted = 0;
+        $history = new WorldHistoryService($this->db);
         foreach (($preview['qualified'] ?? []) as $club) {
             $dup = $this->db->fetchOne(
                 "SELECT id FROM club_seasons WHERE season_id = ? AND club_id = ?",
@@ -245,6 +246,17 @@ class AdminCompetitionService {
                 'club_id' => (int)$club['club_id'],
                 'entry_type' => $club['entry_type'] === 'champion' ? 'champion' : 'qualified',
             ]);
+            $sourceSeasonId = (int)($club['source_season_id'] ?? 0);
+            $sourceCompetitionId = (int)($club['source_competition_id'] ?? 0);
+            if ($sourceSeasonId > 0 && $sourceCompetitionId > 0) {
+                $history->addClubHonor(
+                    (int)$club['club_id'],
+                    $sourceSeasonId,
+                    $sourceCompetitionId,
+                    'CHAMPIONS_QUALIFIED',
+                    'Qualified for Champions League via league finish.'
+                );
+            }
             $inserted++;
         }
 
@@ -538,7 +550,7 @@ class AdminCompetitionService {
         $standings = $this->getOrderedStandings($seasonId);
         $preview = $this->previewRollover($seasonId);
 
-        $finance = new FinanceService($this->db);
+        $history = new WorldHistoryService($this->db);
         $this->db->beginTransaction();
         try {
             $this->db->insert('season_rollover_logs', [
@@ -552,6 +564,20 @@ class AdminCompetitionService {
 
             $this->db->execute("UPDATE seasons SET status = 'FINISHED' WHERE id = ?", [$seasonId]);
             $this->db->commit();
+
+            $champion = $standings[0] ?? null;
+            if ($champion) {
+                $history->addClubHonor(
+                    (int)$champion['club_id'],
+                    $seasonId,
+                    (int)$season['competition_id'],
+                    'LEAGUE_TITLE',
+                    'Finished season in 1st place.'
+                );
+            }
+            $history->applySeasonAwards($seasonId, (int)$season['competition_id']);
+            $history->refreshClubRecordsAndLegends(array_map(fn($r) => (int)$r['club_id'], $standings));
+
             return ['ok' => true, 'preview' => $preview];
         } catch (Throwable $e) {
             $this->db->rollBack();
@@ -627,6 +653,8 @@ class AdminCompetitionService {
 
         $season = $this->db->fetchOne("SELECT * FROM seasons WHERE id = ?", [$seasonId]);
         $competition = $this->db->fetchOne("SELECT * FROM competitions WHERE id = ?", [(int)$season['competition_id']]);
+        $finance = new FinanceService($this->db);
+        $history = new WorldHistoryService($this->db);
 
         $this->db->beginTransaction();
         try {
@@ -649,6 +677,12 @@ class AdminCompetitionService {
                     if (empty($posted['ok'])) {
                         throw new RuntimeException($posted['error'] ?? 'Failed to post promotion reward.');
                     }
+                    $history->addClubHonor((int)$club['club_id'], $seasonId, (int)$competition['id'], 'PROMOTION', 'Promoted during rollover.');
+                }
+            }
+            if (!empty($plan['relegated'])) {
+                foreach ($plan['relegated'] as $club) {
+                    $history->addClubHonor((int)$club['club_id'], $seasonId, (int)$competition['id'], 'RELEGATION', 'Relegated during rollover.');
                 }
             }
             if (!empty($plan['direct'])) {
@@ -658,6 +692,7 @@ class AdminCompetitionService {
                     if (empty($posted['ok'])) {
                         throw new RuntimeException($posted['error'] ?? 'Failed to post title reward.');
                     }
+                    $history->addClubHonor((int)$champion['club_id'], $seasonId, (int)$competition['id'], 'LEAGUE_TITLE', 'Finished season in 1st place.');
                 }
             }
 

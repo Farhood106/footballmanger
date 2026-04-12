@@ -27,6 +27,31 @@
 
 <div class="card">
     <a class="btn" href="/finance">Finance Ledger & Funding</a>
+    <a class="btn" href="/club/history">Club Awards & History</a>
+</div>
+
+<div class="card">
+    <h2>Recent Recognitions</h2>
+    <?php if (empty($recent_recognitions)): ?>
+        <p>No player-of-match/week recognitions yet.</p>
+    <?php else: ?>
+        <table class="table">
+            <tr>
+                <th>Type</th>
+                <th>Player</th>
+                <th>Week</th>
+                <th>Score</th>
+            </tr>
+            <?php foreach ($recent_recognitions as $row): ?>
+                <tr>
+                    <td><?= htmlspecialchars((string)$row['award_type']) ?></td>
+                    <td><?= htmlspecialchars((string)$row['player_name']) ?></td>
+                    <td><?= (int)($row['week_number'] ?? 0) ?: '-' ?></td>
+                    <td><?= number_format((float)($row['score_value'] ?? 0), 2) ?></td>
+                </tr>
+            <?php endforeach; ?>
+        </table>
+    <?php endif; ?>
 </div>
 
 <div class="card">

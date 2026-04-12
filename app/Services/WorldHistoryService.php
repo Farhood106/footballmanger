@@ -117,6 +117,71 @@ class WorldHistoryService {
         ]);
     }
 
+    public function getRecentRecognitionsForClub(int $clubId, int $limit = 10): array {
+        return $this->db->fetchAll(
+            "SELECT pa.*, p.name AS player_name, c.name AS competition_name
+             FROM player_awards pa
+             JOIN players p ON p.id = pa.player_id
+             JOIN competitions c ON c.id = pa.competition_id
+             WHERE pa.club_id = ?
+               AND pa.award_type IN ('PLAYER_OF_MATCH', 'PLAYER_OF_WEEK')
+             ORDER BY pa.created_at DESC, pa.id DESC
+             LIMIT " . max(1, (int)$limit),
+            [$clubId]
+        );
+    }
+
+    public function getSeasonAwardsForClub(int $clubId, int $limit = 15): array {
+        return $this->db->fetchAll(
+            "SELECT pa.*, p.name AS player_name, c.name AS competition_name, s.name AS season_name
+             FROM player_awards pa
+             JOIN players p ON p.id = pa.player_id
+             JOIN competitions c ON c.id = pa.competition_id
+             JOIN seasons s ON s.id = pa.season_id
+             WHERE pa.club_id = ?
+               AND pa.award_type IN ('TOP_SCORER','TOP_ASSIST','BEST_PLAYER','BEST_YOUNG_PLAYER')
+             ORDER BY s.end_date DESC, pa.id DESC
+             LIMIT " . max(1, (int)$limit),
+            [$clubId]
+        );
+    }
+
+    public function getClubHonors(int $clubId, int $limit = 20): array {
+        return $this->db->fetchAll(
+            "SELECT ch.*, c.name AS competition_name, s.name AS season_name
+             FROM club_honors ch
+             JOIN competitions c ON c.id = ch.competition_id
+             JOIN seasons s ON s.id = ch.season_id
+             WHERE ch.club_id = ?
+             ORDER BY s.end_date DESC, ch.id DESC
+             LIMIT " . max(1, (int)$limit),
+            [$clubId]
+        );
+    }
+
+    public function getClubRecords(int $clubId): array {
+        return $this->db->fetchAll(
+            "SELECT cr.*, p.name AS player_name
+             FROM club_records cr
+             LEFT JOIN players p ON p.id = cr.player_id
+             WHERE cr.club_id = ?
+             ORDER BY cr.record_key ASC",
+            [$clubId]
+        );
+    }
+
+    public function getClubLegends(int $clubId, int $limit = 20): array {
+        return $this->db->fetchAll(
+            "SELECT cl.*, p.name AS player_name
+             FROM club_legends cl
+             JOIN players p ON p.id = cl.player_id
+             WHERE cl.club_id = ?
+             ORDER BY cl.legend_score DESC, cl.id ASC
+             LIMIT " . max(1, (int)$limit),
+            [$clubId]
+        );
+    }
+
     public function refreshClubRecordsAndLegends(array $clubIds): void {
         foreach ($clubIds as $clubId) {
             $clubId = (int)$clubId;
