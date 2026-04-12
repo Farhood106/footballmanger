@@ -36,6 +36,8 @@ class DailyCycleOrchestrator {
         $development = $career->runDailyDevelopmentAndValuation($cycleDate);
         $finance = new FinanceService($this->db);
         $salaryPosting = $finance->postCoachSalariesForCycle($cycleDate);
+        $facilities = new ClubFacilityService($this->db);
+        $facilityMaintenance = $facilities->postDailyMaintenance($cycleDate);
 
         $result = [
             'executed_at' => $at->format('Y-m-d H:i:s'),
@@ -47,6 +49,7 @@ class DailyCycleOrchestrator {
             'club_states' => [],
             'ai_preparation' => [],
             'salary_postings' => $salaryPosting['posted'] ?? 0,
+            'facility_maintenance_postings' => $facilityMaintenance['posted'] ?? 0,
             'vacancy_sync' => $vacancySync['synced'] ?? 0,
             'development_adjustments' => $development['adjusted'] ?? 0,
         ];

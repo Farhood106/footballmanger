@@ -7,6 +7,7 @@ class DashboardController extends Controller {
     private MatchModel $matchModel;
     private NotificationModel $notificationModel;
     private WorldHistoryService $historyService;
+    private ClubFacilityService $facilityService;
 
     public function __construct() {
         parent::__construct();
@@ -15,6 +16,7 @@ class DashboardController extends Controller {
         $this->matchModel = new MatchModel();
         $this->notificationModel = new NotificationModel();
         $this->historyService = new WorldHistoryService();
+        $this->facilityService = new ClubFacilityService();
     }
 
     public function index(): void {
@@ -37,6 +39,7 @@ class DashboardController extends Controller {
         $finances = $this->clubModel->getFinances($club['id']);
         $activeSponsors = $this->clubModel->getSponsors((int)$club['id'], true);
         $recentRecognitions = $this->historyService->getRecentRecognitionsForClub((int)$club['id'], 5);
+        $facilityOverview = $this->facilityService->getFacilitiesForClub((int)$club['id']);
 
         $this->view('dashboard/index', [
             'club' => $clubDetails,
@@ -45,7 +48,8 @@ class DashboardController extends Controller {
             'notifications' => $notifications,
             'finances' => $finances,
             'active_sponsors' => $activeSponsors,
-            'recent_recognitions' => $recentRecognitions
+            'recent_recognitions' => $recentRecognitions,
+            'facility_overview' => $facilityOverview
         ]);
     }
 }

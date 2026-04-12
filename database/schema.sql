@@ -587,7 +587,7 @@ CREATE TABLE IF NOT EXISTS club_finance_ledger (
     id INT AUTO_INCREMENT PRIMARY KEY,
     club_id INT NOT NULL,
     season_id INT,
-    entry_type ENUM('COACH_SALARY','MATCH_REWARD','SEASON_REWARD','GOVERNANCE_PENALTY','GOVERNANCE_COMPENSATION','TRANSFER_IN','TRANSFER_OUT','OWNER_FUNDING','SPONSOR_INCOME','MANUAL_ADMIN_ADJUSTMENT','WAGE','STAFF_WAGE','SPONSOR','TICKET','PRIZE','PENALTY','OTHER') NOT NULL,
+    entry_type ENUM('COACH_SALARY','MATCH_REWARD','SEASON_REWARD','GOVERNANCE_PENALTY','GOVERNANCE_COMPENSATION','TRANSFER_IN','TRANSFER_OUT','OWNER_FUNDING','SPONSOR_INCOME','MANUAL_ADMIN_ADJUSTMENT','FACILITY_UPGRADE','FACILITY_DOWNGRADE_REFUND','FACILITY_MAINTENANCE','WAGE','STAFF_WAGE','SPONSOR','TICKET','PRIZE','PENALTY','OTHER') NOT NULL,
     amount BIGINT NOT NULL,
     description VARCHAR(500),
     reference_type VARCHAR(50),
@@ -614,6 +614,20 @@ CREATE TABLE IF NOT EXISTS club_sponsors (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
     INDEX idx_club_sponsor_tier (club_id, tier)
+) ENGINE=InnoDB;
+
+-- Club facility slots (infrastructure progression foundation)
+CREATE TABLE IF NOT EXISTS club_facilities (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    club_id INT NOT NULL,
+    facility_type ENUM('stadium','training_ground','youth_academy','headquarters') NOT NULL,
+    level INT NOT NULL DEFAULT 1,
+    image_url VARCHAR(500),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_club_facility_type (club_id, facility_type),
+    INDEX idx_club_facility_level (club_id, facility_type, level),
+    FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 -- Owner funding events (payment-verification-ready)

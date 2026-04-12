@@ -28,6 +28,7 @@
 <div class="card">
     <a class="btn" href="/finance">Finance Ledger & Funding</a>
     <a class="btn" href="/club/history">Club Awards & History</a>
+    <a class="btn" href="/club/facilities">Club Facilities</a>
 </div>
 
 <div class="card">
@@ -48,6 +49,28 @@
                     <td><?= htmlspecialchars((string)$row['player_name']) ?></td>
                     <td><?= (int)($row['week_number'] ?? 0) ?: '-' ?></td>
                     <td><?= number_format((float)($row['score_value'] ?? 0), 2) ?></td>
+                </tr>
+            <?php endforeach; ?>
+        </table>
+    <?php endif; ?>
+</div>
+
+<div class="card">
+    <h2>Facility Overview</h2>
+    <?php if (empty($facility_overview)): ?>
+        <p>No facility data yet.</p>
+    <?php else: ?>
+        <table class="table">
+            <tr>
+                <th>Facility</th>
+                <th>Level</th>
+                <th>Daily Maintenance</th>
+            </tr>
+            <?php foreach ($facility_overview as $f): ?>
+                <tr>
+                    <td><?= htmlspecialchars((string)$f['label']) ?></td>
+                    <td><?= (int)$f['level'] ?> / <?= (int)$f['max_level'] ?></td>
+                    <td>$<?= number_format((int)$f['daily_maintenance_cost']) ?></td>
                 </tr>
             <?php endforeach; ?>
         </table>

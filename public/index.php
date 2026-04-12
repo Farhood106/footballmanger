@@ -39,6 +39,9 @@ $router->post('/club/assign', 'AuthController@assignClub');
 $router->get('/', 'DashboardController@index');
 $router->get('/dashboard', 'DashboardController@index');
 $router->get('/club/history', 'ClubHistoryController@index');
+$router->get('/club/facilities', 'ClubFacilitiesController@index');
+$router->post('/club/facilities/upgrade', 'ClubFacilitiesController@upgrade');
+$router->post('/club/facilities/downgrade', 'ClubFacilitiesController@downgrade');
 
 // Squad management
 $router->get('/squad', 'SquadController@index');

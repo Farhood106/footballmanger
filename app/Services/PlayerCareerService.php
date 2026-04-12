@@ -3,9 +3,11 @@
 
 class PlayerCareerService {
     private Database $db;
+    private ClubFacilityService $facilities;
 
     public function __construct(?Database $db = null) {
         $this->db = $db ?? Database::getInstance();
+        $this->facilities = new ClubFacilityService($this->db);
         $this->ensureReadinessColumns();
         $this->ensureCareerHistoryTable();
     }
@@ -51,19 +53,38 @@ class PlayerCareerService {
     }
 
     public function applyDailyRecoveryAndDrift(): array {
-        $this->db->execute(
-            "UPDATE players
-             SET fitness = LEAST(100, GREATEST(0, fitness + CASE WHEN is_injured = 1 THEN 2 ELSE 6 END)),
-                 morale_score = LEAST(100, GREATEST(0, morale_score + CASE
-                     WHEN morale_score < 55 THEN 2
-                     WHEN morale_score > 75 THEN -1
-                     ELSE 0
-                 END)),
-                 fatigue = LEAST(100, GREATEST(0, 100 - fitness)),
-                 morale = ROUND(morale_score / 10, 1)
-             WHERE is_retired = 0"
+        $players = $this->db->fetchAll(
+            "SELECT id, club_id, fitness, morale_score, morale, is_injured
+             FROM players
+             WHERE is_retired = 0
+             ORDER BY id ASC"
         );
-        return ['ok' => true];
+
+        foreach ($players as $player) {
+            $clubId = (int)($player['club_id'] ?? 0);
+            $recoveryBonus = $clubId > 0 ? $this->facilities->getReadinessRecoveryBonus($clubId) : 0;
+            $baseRecovery = !empty($player['is_injured']) ? 2 : 6;
+            $newFitness = min(100, max(0, (int)($player['fitness'] ?? 100) + $baseRecovery + $recoveryBonus));
+
+            $moraleScore = (int)($player['morale_score'] ?? 70);
+            $moraleDrift = $moraleScore < 55 ? 2 : ($moraleScore > 75 ? -1 : 0);
+            $newMoraleScore = min(100, max(0, $moraleScore + $moraleDrift));
+
+            $this->db->execute(
+                "UPDATE players
+                 SET fitness = ?, morale_score = ?, fatigue = ?, morale = ?
+                 WHERE id = ?",
+                [
+                    $newFitness,
+                    $newMoraleScore,
+                    max(0, min(100, 100 - $newFitness)),
+                    round($newMoraleScore / 10, 1),
+                    (int)$player['id']
+                ]
+            );
+        }
+
+        return ['ok' => true, 'updated' => count($players)];
     }
 
     public function runDailyDevelopmentAndValuation(string $cycleDate): array {
@@ -95,6 +116,13 @@ class PlayerCareerService {
                 (int)($player['morale_score'] ?? 70),
                 !empty($player['is_injured'])
             );
+            $clubId = (int)($player['club_id'] ?? 0);
+            if ($clubId > 0) {
+                $signal += $this->facilities->getTrainingDevelopmentBonus($clubId);
+                if ($age <= 21) {
+                    $signal += $this->facilities->getYouthPotentialBonus($clubId);
+                }
+            }
 
             $overall = (int)$player['overall'];
             if ($signal >= 0.85 && $overall < (int)$player['potential']) {

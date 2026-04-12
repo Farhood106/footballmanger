@@ -15,6 +15,9 @@ class FinanceService {
         'OWNER_FUNDING',
         'SPONSOR_INCOME',
         'MANUAL_ADMIN_ADJUSTMENT',
+        'FACILITY_UPGRADE',
+        'FACILITY_DOWNGRADE_REFUND',
+        'FACILITY_MAINTENANCE',
         // backward compatibility:
         'WAGE', 'STAFF_WAGE', 'PENALTY', 'PRIZE', 'OTHER', 'SPONSOR', 'TICKET'
     ];
@@ -238,5 +241,15 @@ class FinanceService {
         if (!$hasMeta) {
             $this->db->execute("ALTER TABLE club_finance_ledger ADD COLUMN meta_json JSON NULL AFTER reference_id");
         }
+
+        $this->db->execute(
+            "ALTER TABLE club_finance_ledger
+             MODIFY COLUMN entry_type ENUM(
+                'COACH_SALARY','MATCH_REWARD','SEASON_REWARD','GOVERNANCE_PENALTY','GOVERNANCE_COMPENSATION',
+                'TRANSFER_IN','TRANSFER_OUT','OWNER_FUNDING','SPONSOR_INCOME','MANUAL_ADMIN_ADJUSTMENT',
+                'FACILITY_UPGRADE','FACILITY_DOWNGRADE_REFUND','FACILITY_MAINTENANCE',
+                'WAGE','STAFF_WAGE','PENALTY','PRIZE','OTHER','SPONSOR','TICKET'
+             ) NOT NULL"
+        );
     }
 }
