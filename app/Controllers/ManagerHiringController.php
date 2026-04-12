@@ -75,8 +75,13 @@ class ManagerHiringController extends Controller {
             $club['expectation'] = $this->applicationModel->getExpectationByClub((int)$club['id']);
         }
 
+        $history = $this->applicationModel->getByCoach((int)Auth::id());
+        $offers = $this->applicationModel->getOffersForCoach((int)Auth::id());
+
         $this->view('manager/apply', [
-            'clubs' => $clubs
+            'clubs' => $clubs,
+            'history' => $history,
+            'offers' => $offers
         ]);
     }
 
@@ -90,8 +95,15 @@ class ManagerHiringController extends Controller {
 
         $userId = (int)Auth::id();
         if ($this->applicationModel->hasPendingApplication($clubId, $userId)) {
+            $clubs = $this->clubModel->getUnmanaged();
+            foreach ($clubs as &$club) {
+                $club['expectation'] = $this->applicationModel->getExpectationByClub((int)$club['id']);
+            }
+
             $this->view('manager/apply', [
-                'clubs' => $this->clubModel->getUnmanaged(),
+                'clubs' => $clubs,
+                'history' => $this->applicationModel->getByCoach($userId),
+                'offers' => $this->applicationModel->getOffersForCoach($userId),
                 'error' => 'برای این باشگاه قبلاً درخواست فعال ثبت کرده‌اید.'
             ]);
             return;
@@ -113,6 +125,8 @@ class ManagerHiringController extends Controller {
 
         $this->view('manager/apply', [
             'clubs' => $clubs,
+            'history' => $this->applicationModel->getByCoach($userId),
+            'offers' => $this->applicationModel->getOffersForCoach($userId),
             'success' => 'درخواست مربیگری ثبت شد و در انتظار بررسی مالک/مدیر سایت است.'
         ]);
     }
@@ -124,7 +138,8 @@ class ManagerHiringController extends Controller {
         }
 
         $pending = $this->applicationModel->getPendingForReviewer((int)Auth::id(), Auth::isAdmin());
-        $this->view('manager/manage-applications', ['pending' => $pending]);
+        $offers = $this->applicationModel->getOffersForReviewer((int)Auth::id(), Auth::isAdmin());
+        $this->view('manager/manage-applications', ['pending' => $pending, 'offers' => $offers]);
     }
 
     public function approveApplication(): void {
@@ -135,6 +150,84 @@ class ManagerHiringController extends Controller {
         $this->review(false);
     }
 
+
+    public function sendOffer(): void {
+        $this->requireAuth();
+        if (!Auth::isAdmin() && Auth::gameRole() !== 'OWNER') {
+            $this->redirect('/dashboard');
+        }
+
+        $applicationId = (int)($_POST['application_id'] ?? 0);
+        $salary = (int)($_POST['offered_salary_per_cycle'] ?? -1);
+        $cycles = (int)($_POST['offered_contract_length_cycles'] ?? 0);
+        $objective = trim((string)($_POST['club_objective'] ?? ''));
+        $bonusPromotion = (int)($_POST['bonus_promotion'] ?? 0);
+        $bonusTitle = (int)($_POST['bonus_title'] ?? 0);
+
+        $result = $this->applicationModel->sendOffer(
+            $applicationId,
+            (int)Auth::id(),
+            Auth::isAdmin(),
+            $salary,
+            $cycles,
+            $objective,
+            $bonusPromotion,
+            $bonusTitle
+        );
+
+        $this->renderManageApplicationsResult($result);
+    }
+
+    public function respondOfferAccept(int $id): void {
+        $this->respondOffer($id, 'accept');
+    }
+
+    public function respondOfferReject(int $id): void {
+        $this->respondOffer($id, 'reject');
+    }
+
+    public function respondOfferCounter(int $id): void {
+        $this->respondOffer($id, 'counter');
+    }
+
+    private function respondOffer(int $id, string $action): void {
+        $this->requireAuth();
+
+        $result = $this->applicationModel->respondToOffer(
+            $id,
+            (int)Auth::id(),
+            Auth::isAdmin(),
+            $action,
+            (int)($_POST['offered_salary_per_cycle'] ?? 0),
+            (int)($_POST['offered_contract_length_cycles'] ?? 0),
+            trim((string)($_POST['club_objective'] ?? '')),
+            (int)($_POST['bonus_promotion'] ?? 0),
+            (int)($_POST['bonus_title'] ?? 0)
+        );
+
+        $clubs = $this->clubModel->getUnmanaged();
+        foreach ($clubs as &$club) {
+            $club['expectation'] = $this->applicationModel->getExpectationByClub((int)$club['id']);
+        }
+
+        $this->view('manager/apply', [
+            'clubs' => $clubs,
+            'history' => $this->applicationModel->getByCoach((int)Auth::id()),
+            'offers' => $this->applicationModel->getOffersForCoach((int)Auth::id()),
+            'success' => !empty($result['ok']) ? 'پاسخ به پیشنهاد ثبت شد.' : null,
+            'error' => !empty($result['ok']) ? null : ($result['error'] ?? 'امکان انجام این عملیات وجود ندارد.')
+        ]);
+    }
+
+    private function renderManageApplicationsResult(array $result): void {
+        $this->view('manager/manage-applications', [
+            'pending' => $this->applicationModel->getPendingForReviewer((int)Auth::id(), Auth::isAdmin()),
+            'offers' => $this->applicationModel->getOffersForReviewer((int)Auth::id(), Auth::isAdmin()),
+            'success' => !empty($result['ok']) ? 'عملیات انجام شد.' : null,
+            'error' => !empty($result['ok']) ? null : ($result['error'] ?? 'امکان انجام این عملیات وجود ندارد.')
+        ]);
+    }
+
     private function review(bool $approve): void {
         $this->requireAuth();
 
@@ -143,12 +236,24 @@ class ManagerHiringController extends Controller {
             $this->redirect('/manager/applications/manage');
         }
 
+        $reason = trim((string)($_POST['rejection_reason'] ?? ''));
+
+        if (!$approve && $reason === '') {
+            $this->view('manager/manage-applications', [
+                'pending' => $this->applicationModel->getPendingForReviewer((int)Auth::id(), Auth::isAdmin()),
+                'offers' => $this->applicationModel->getOffersForReviewer((int)Auth::id(), Auth::isAdmin()),
+                'error' => 'وارد کردن دلیل رد درخواست الزامی است.'
+            ]);
+            return;
+        }
+
         $ok = $approve
             ? $this->applicationModel->approve($id, (int)Auth::id(), Auth::isAdmin())
-            : $this->applicationModel->reject($id, (int)Auth::id(), Auth::isAdmin());
+            : $this->applicationModel->reject($id, (int)Auth::id(), Auth::isAdmin(), $reason);
 
         $this->view('manager/manage-applications', [
             'pending' => $this->applicationModel->getPendingForReviewer((int)Auth::id(), Auth::isAdmin()),
+            'offers' => $this->applicationModel->getOffersForReviewer((int)Auth::id(), Auth::isAdmin()),
             'success' => $ok ? 'عملیات انجام شد.' : null,
             'error' => $ok ? null : 'امکان انجام این عملیات وجود ندارد.'
         ]);

@@ -38,6 +38,10 @@ $router->post('/club/assign', 'AuthController@assignClub');
 // Dashboard
 $router->get('/', 'DashboardController@index');
 $router->get('/dashboard', 'DashboardController@index');
+$router->get('/club/history', 'ClubHistoryController@index');
+$router->get('/club/facilities', 'ClubFacilitiesController@index');
+$router->post('/club/facilities/upgrade', 'ClubFacilitiesController@upgrade');
+$router->post('/club/facilities/downgrade', 'ClubFacilitiesController@downgrade');
 
 // Squad management
 $router->get('/squad', 'SquadController@index');
@@ -51,6 +55,7 @@ $router->get('/match/{id}', 'MatchController@detail');
 
 // Transfers
 $router->get('/transfers', 'TransferController@market');
+$router->post('/transfer/listing', 'TransferController@setListed');
 $router->post('/transfer/bid', 'TransferController@makeBid');
 $router->post('/transfer/accept/{id}', 'TransferController@acceptBid');
 $router->post('/transfer/reject/{id}', 'TransferController@rejectBid');
@@ -75,12 +80,60 @@ $router->get('/manager/applications/manage', 'ManagerHiringController@manageAppl
 $router->post('/manager/applications/approve', 'ManagerHiringController@approveApplication');
 $router->post('/manager/applications/reject', 'ManagerHiringController@rejectApplication');
 
+$router->post('/manager/applications/offer', 'ManagerHiringController@sendOffer');
+$router->post('/manager/offers/{id}/accept', 'ManagerHiringController@respondOfferAccept');
+$router->post('/manager/offers/{id}/reject', 'ManagerHiringController@respondOfferReject');
+$router->post('/manager/offers/{id}/counter', 'ManagerHiringController@respondOfferCounter');
+
+
+
+// Finance
+$router->get('/finance', 'FinanceController@index');
+$router->post('/finance/owner-funding', 'FinanceController@ownerFunding');
+$router->post('/finance/sponsors/add', 'FinanceController@addSponsor');
+$router->post('/finance/sponsors/update', 'FinanceController@updateSponsor');
+$router->post('/finance/sponsors/toggle', 'FinanceController@toggleSponsor');
+$router->post('/finance/sponsors/income', 'FinanceController@sponsorIncome');
+$router->post('/finance/admin-adjust', 'FinanceController@manualAdjust');
+
+// Governance
+$router->get('/governance/cases', 'GovernanceController@index');
+$router->get('/governance/cases/new', 'GovernanceController@createForm');
+$router->post('/governance/cases/create', 'GovernanceController@createCase');
+$router->get('/governance/cases/{id}', 'GovernanceController@detail');
+$router->get('/governance/review', 'GovernanceController@reviewIndex');
+$router->post('/governance/review/{id}/resolve', 'GovernanceController@resolve');
+
 // Admin
 $router->get('/admin', 'AdminController@index');
 $router->get('/admin/clubs/create', 'AdminController@createClubForm');
 $router->post('/admin/clubs/create', 'AdminController@storeClub');
 $router->get('/admin/players/create', 'AdminController@createPlayerForm');
 $router->post('/admin/players/create', 'AdminController@storePlayer');
+
+$router->get('/admin/competitions', 'AdminCompetitionController@index');
+$router->post('/admin/competitions/create', 'AdminCompetitionController@createCompetition');
+$router->post('/admin/competitions/{id}/update', 'AdminCompetitionController@updateCompetition');
+$router->post('/admin/competitions/{id}/toggle', 'AdminCompetitionController@toggleCompetition');
+$router->post('/admin/seasons/create', 'AdminCompetitionController@createSeason');
+$router->post('/admin/seasons/{id}/start', 'AdminCompetitionController@startSeason');
+$router->post('/admin/seasons/{id}/end', 'AdminCompetitionController@endSeason');
+$router->post('/admin/seasons/{id}/fixtures/generate', 'AdminCompetitionController@generateFixtures');
+$router->post('/admin/seasons/{id}/finalize', 'AdminCompetitionController@finalizeSeason');
+$router->post('/admin/seasons/{id}/rollover/apply', 'AdminCompetitionController@applyRollover');
+$router->post('/admin/qualifications/slots/save', 'AdminCompetitionController@saveQualificationSlot');
+$router->post('/admin/seasons/{id}/qualifications/preview', 'AdminCompetitionController@previewQualifications');
+$router->post('/admin/seasons/{id}/qualifications/apply', 'AdminCompetitionController@applyQualifications');
+$router->post('/admin/seasons/{season_id}/participants/add', 'AdminCompetitionController@addParticipant');
+$router->post('/admin/seasons/{season_id}/participants/{club_id}/remove', 'AdminCompetitionController@removeParticipant');
+$router->get('/admin/seasons/{id}/fixtures', 'AdminCompetitionController@fixtures');
+
+
+$router->get('/admin/match-operations', 'AdminMatchOperationsController@index');
+$router->post('/admin/match-operations/{id}/repair', 'AdminMatchOperationsController@repair');
+$router->post('/admin/match-operations/{id}/rerun', 'AdminMatchOperationsController@rerun');
+$router->post('/admin/match-operations/{id}/reset-lineup', 'AdminMatchOperationsController@resetLineup');
+$router->post('/admin/match-operations/cycle/sync', 'AdminMatchOperationsController@syncCycle');
 
 // Dispatch request
 $router->dispatch();

@@ -8,7 +8,7 @@
     </div>
 
     <div class="stat-box">
-        <h3><?= number_format($finances['budget']) ?> $</h3>
+        <h3><?= number_format($finances['balance'] ?? 0) ?> $</h3>
         <p>بودجه باشگاه</p>
     </div>
 
@@ -22,6 +22,89 @@
         <p>بازی‌های پیش‌رو</p>
     </div>
 
+</div>
+
+
+<div class="card">
+    <a class="btn" href="/finance">Finance Ledger & Funding</a>
+    <a class="btn" href="/club/history">Club Awards & History</a>
+    <a class="btn" href="/club/facilities">Club Facilities</a>
+</div>
+
+<div class="card">
+    <h2>Recent Recognitions</h2>
+    <?php if (empty($recent_recognitions)): ?>
+        <p>No player-of-match/week recognitions yet.</p>
+    <?php else: ?>
+        <table class="table">
+            <tr>
+                <th>Type</th>
+                <th>Player</th>
+                <th>Week</th>
+                <th>Score</th>
+            </tr>
+            <?php foreach ($recent_recognitions as $row): ?>
+                <tr>
+                    <td><?= htmlspecialchars((string)$row['award_type']) ?></td>
+                    <td><?= htmlspecialchars((string)$row['player_name']) ?></td>
+                    <td><?= (int)($row['week_number'] ?? 0) ?: '-' ?></td>
+                    <td><?= number_format((float)($row['score_value'] ?? 0), 2) ?></td>
+                </tr>
+            <?php endforeach; ?>
+        </table>
+    <?php endif; ?>
+</div>
+
+<div class="card">
+    <h2>Facility Overview</h2>
+    <?php if (empty($facility_overview)): ?>
+        <p>No facility data yet.</p>
+    <?php else: ?>
+        <table class="table">
+            <tr>
+                <th>Facility</th>
+                <th>Level</th>
+                <th>Daily Maintenance</th>
+            </tr>
+            <?php foreach ($facility_overview as $f): ?>
+                <tr>
+                    <td><?= htmlspecialchars((string)$f['label']) ?></td>
+                    <td><?= (int)$f['level'] ?> / <?= (int)$f['max_level'] ?></td>
+                    <td>$<?= number_format((int)$f['daily_maintenance_cost']) ?></td>
+                </tr>
+            <?php endforeach; ?>
+        </table>
+    <?php endif; ?>
+</div>
+
+<div class="card">
+    <h2>Club Sponsors</h2>
+    <?php if (empty($active_sponsors)): ?>
+        <p>No active sponsors yet.</p>
+    <?php else: ?>
+        <div class="grid">
+            <?php foreach ($active_sponsors as $sponsor): ?>
+                <div class="stat-box">
+                    <h3><?= htmlspecialchars((string)$sponsor['brand_name']) ?></h3>
+                    <p>
+                        Tier:
+                        <strong>
+                            <?= htmlspecialchars(strtoupper((string)$sponsor['tier'])) ?>
+                        </strong>
+                    </p>
+                    <?php if (!empty($sponsor['description'])): ?>
+                        <p><?= htmlspecialchars((string)$sponsor['description']) ?></p>
+                    <?php endif; ?>
+                    <?php if (!empty($sponsor['contact_link'])): ?>
+                        <p><a class="btn" href="<?= htmlspecialchars((string)$sponsor['contact_link']) ?>" target="_blank" rel="noopener">Visit Sponsor</a></p>
+                    <?php endif; ?>
+                    <?php if (!empty($sponsor['banner_url'])): ?>
+                        <img src="<?= htmlspecialchars((string)$sponsor['banner_url']) ?>" alt="<?= htmlspecialchars((string)$sponsor['brand_name']) ?>" style="max-width:220px; width:100%; border-radius:8px;">
+                    <?php endif; ?>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    <?php endif; ?>
 </div>
 
 <div class="card">

@@ -61,23 +61,13 @@ class SquadController extends Controller {
             $this->json(['error' => 'فرمیشن و ترکیب الزامی است'], 400);
         }
 
-        $activeTactic = $this->tacticModel->getActiveByClub($clubId);
-        if ($activeTactic) {
-            $tacticId = $activeTactic['id'];
-            $this->tacticModel->update($tacticId, [
-                'formation' => $formation,
-                'mentality' => $mentality
-            ]);
-        } else {
-            $tacticId = $this->tacticModel->create([
-                'club_id' => $clubId,
-                'formation' => $formation,
-                'mentality' => $mentality,
-                'is_active' => 1
-            ]);
-        }
+        $this->tacticModel->saveTacticalSetup($clubId, [
+            'formation' => $formation,
+            'mentality' => $mentality
+        ]);
 
-        $this->tacticModel->saveLineup($tacticId, $lineup);
+        $phaseKey = $_POST['phase_key'] ?? 'MATCH_1';
+        $this->tacticModel->saveLineup($clubId, $phaseKey, $lineup);
         $this->json(['success' => true, 'message' => 'تاکتیک با موفقیت ذخیره شد']);
     }
 

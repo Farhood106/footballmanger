@@ -3,6 +3,8 @@
 
 class MatchEngine {
     private Database $db;
+    private PlayerCareerService $playerCareer;
+    private WorldHistoryService $history;
 
     // تأثیر تاکتیک‌ها روی هم (rock-paper-scissors style)
     private const TACTIC_MATRIX = [
@@ -21,18 +23,16 @@ class MatchEngine {
 
     public function __construct() {
         $this->db = Database::getInstance();
+        $this->playerCareer = new PlayerCareerService($this->db);
+        $this->history = new WorldHistoryService($this->db);
     }
 
     public function simulate(int $matchId): array {
-        $match = $this->db->fetchOne("SELECT * FROM matches WHERE id = ?", [$matchId]);
-        if (!$match || $match['status'] !== 'SCHEDULED') {
-            throw new Exception("Match not available for simulation");
-        }
+        $match = $this->claimScheduledMatch($matchId);
 
-        $this->db->query("UPDATE matches SET status = 'LIVE' WHERE id = ?", [$matchId]);
-
-        // ۱. بارگذاری داده‌ها
-        $homeSquad = $this->getSquad($match['home_club_id']);
+        try {
+            // ۱. بارگذاری داده‌ها
+            $homeSquad = $this->getSquad($match['home_club_id']);
         $awaySquad = $this->getSquad($match['away_club_id']);
         $homeTactics = $this->getTactics($match['home_club_id']);
         $awayTactics = $this->getTactics($match['away_club_id']);
@@ -61,21 +61,79 @@ class MatchEngine {
         $this->saveResult($matchId, $homeGoals, $awayGoals, $stats, $xG, $events, $ratings);
 
         // ۹. آپدیت وضعیت بازیکنان
-        $this->updatePlayerStates($homeSquad, $awaySquad, $events, $ratings);
+        $this->updatePlayerStates($match, $homeSquad, $awaySquad, $events, $ratings);
 
         // ۱۰. آپدیت جدول
         $this->updateStandings($match, $homeGoals, $awayGoals);
 
-        return [
-            'match_id' => $matchId,
-            'home_score' => $homeGoals,
-            'away_score' => $awayGoals,
-            'home_xg' => round($xG['home'], 2),
-            'away_xg' => round($xG['away'], 2),
-            'events' => $events,
-            'stats' => $stats,
-            'ratings' => $ratings
-        ];
+        // ۱۱. match/week awards
+        $this->recordMatchAwards($match, $homeSquad, $awaySquad, $ratings);
+
+            return [
+                'match_id' => $matchId,
+                'home_score' => $homeGoals,
+                'away_score' => $awayGoals,
+                'home_xg' => round($xG['home'], 2),
+                'away_xg' => round($xG['away'], 2),
+                'events' => $events,
+                'stats' => $stats,
+                'ratings' => $ratings
+            ];
+        } catch (Throwable $e) {
+            // rollback claim so the match can be retried safely
+            $this->db->query("UPDATE matches SET status = 'SCHEDULED' WHERE id = ? AND status = 'LIVE'", [$matchId]);
+            throw $e;
+        }
+    }
+
+    private function recordMatchAwards(array $match, array $homeSquad, array $awaySquad, array $ratings): void {
+        if (empty($ratings)) return;
+        usort($ratings, fn($a, $b) => ((float)$b['rating'] <=> (float)$a['rating']) ?: ((int)$a['player_id'] <=> (int)$b['player_id']));
+        $best = $ratings[0];
+        $playerClubMap = [];
+        foreach (array_slice($homeSquad, 0, 11) as $p) $playerClubMap[(int)$p['id']] = (int)$match['home_club_id'];
+        foreach (array_slice($awaySquad, 0, 11) as $p) $playerClubMap[(int)$p['id']] = (int)$match['away_club_id'];
+        $clubId = (int)($playerClubMap[(int)$best['player_id']] ?? 0);
+        $seasonId = (int)($match['season_id'] ?? 0);
+        if ($seasonId <= 0 || $clubId <= 0) return;
+        $season = $this->db->fetchOne("SELECT competition_id FROM seasons WHERE id = ?", [$seasonId]);
+        if (!$season) return;
+        $competitionId = (int)$season['competition_id'];
+        $week = (int)($match['week'] ?? 0);
+
+        $this->history->recordPlayerOfMatch((int)$match['id'], $seasonId, $competitionId, [
+            'player_id' => (int)$best['player_id'],
+            'club_id' => $clubId,
+            'rating' => (float)$best['rating']
+        ]);
+        if ($week > 0) {
+            $this->history->upsertWeeklyAwardFromMatch((int)$match['id'], $seasonId, $competitionId, $week, [
+                'player_id' => (int)$best['player_id'],
+                'club_id' => $clubId,
+                'score' => (float)$best['rating']
+            ]);
+        }
+    }
+
+    private function claimScheduledMatch(int $matchId): array {
+        $this->db->beginTransaction();
+        try {
+            $match = $this->db->fetchOne("SELECT * FROM matches WHERE id = ? FOR UPDATE", [$matchId]);
+            if (!$match || $match['status'] !== 'SCHEDULED') {
+                $this->db->rollBack();
+                throw new Exception("Match not available for simulation");
+            }
+
+            $this->db->query("UPDATE matches SET status = 'LIVE' WHERE id = ? AND status = 'SCHEDULED'", [$matchId]);
+            $this->db->commit();
+
+            return $match;
+        } catch (Throwable $e) {
+            if (method_exists($this->db, 'rollBack')) {
+                try { $this->db->rollBack(); } catch (Throwable $ignored) {}
+            }
+            throw $e;
+        }
     }
 
     // ─── محاسبه قدرت تیم ───────────────────────────────────────────────────
@@ -445,7 +503,11 @@ class MatchEngine {
                 'player_id' => $player['id'],
                 'rating' => round($rating, 1),
                 'goals' => $goalScorers[$player['id']] ?? 0,
-                'assists' => $assisters[$player['id']] ?? 0
+                'assists' => $assisters[$player['id']] ?? 0,
+                'result' => $player['result'],
+                'yellow_cards' => isset($yellowCards[$player['id']]) ? 1 : 0,
+                'red_cards' => isset($redCards[$player['id']]) ? 1 : 0,
+                'injured' => isset($injured[$player['id']]) ? 1 : 0
             ];
         }
 
@@ -497,32 +559,21 @@ class MatchEngine {
 
     // ─── آپدیت وضعیت بازیکنان ──────────────────────────────────────────────
 
-    private function updatePlayerStates(array $homeSquad, array $awaySquad, array $events, array $ratings): void {
-        $allPlayers = array_merge(array_slice($homeSquad, 0, 11), array_slice($awaySquad, 0, 11));
+    private function updatePlayerStates(array $match, array $homeSquad, array $awaySquad, array $events, array $ratings): void {
+        $starters = array_merge(array_slice($homeSquad, 0, 11), array_slice($awaySquad, 0, 11));
+        $benches = array_merge(array_slice($homeSquad, 11, 7), array_slice($awaySquad, 11, 7));
+        $allPlayers = array_merge($starters, $benches);
+        $seasonId = (int)($match['season_id'] ?? $this->getCurrentSeasonId());
+        $ratingByPlayer = [];
+        foreach ($ratings as $r) {
+            $ratingByPlayer[(int)$r['player_id']] = $r;
+        }
 
         foreach ($allPlayers as $player) {
             $playerId = $player['id'];
-            $rating = current(array_filter($ratings, fn($r) => $r['player_id'] === $playerId));
-
-            // فرم (میانگین متحرک ۵ بازی اخیر)
-            $newForm = $rating ? min(10, max(1, ($player['form'] * 4 + $rating['rating']) / 5)) : $player['form'];
-
-            // خستگی
-            $newFatigue = min(100, $player['fatigue'] + mt_rand(8, 15));
-
-            // روحیه
-            $moraleDelta = match(true) {
-                $rating['rating'] >= 8.0 => 0.3,
-                $rating['rating'] >= 7.0 => 0.1,
-                $rating['rating'] <= 5.0 => -0.2,
-                default => 0.0
-            };
-            $newMorale = max(1, min(10, $player['morale'] + $moraleDelta));
-
-            $this->db->query(
-                "UPDATE players SET form = ?, fatigue = ?, morale = ? WHERE id = ?",
-                [round($newForm, 1), $newFatigue, round($newMorale, 1), $playerId]
-            );
+            $rating = $ratingByPlayer[$playerId] ?? null;
+            $started = $rating !== null;
+            $minutesPlayed = $started ? 90 : 0;
 
             // مصدومیت
             $injury = current(array_filter($events, fn($e) => $e['type'] === 'INJURY' && $e['player_id'] === $playerId));
@@ -538,18 +589,20 @@ class MatchEngine {
                 $this->db->query("UPDATE players SET is_injured = 1, injury_days = ? WHERE id = ?", [$details['severity'], $playerId]);
             }
 
-            // آپدیت آمار فصل
-            $this->updateSeasonStats($playerId, $rating);
+            $this->playerCareer->applyPostMatchPlayerUpdate($player, $rating, $started, $minutesPlayed, $injury !== false);
+
+            // آپدیت آمار فصل + تاریخچه حرفه‌ای
+            $this->updateSeasonStats($playerId, $seasonId, $rating, $minutesPlayed, $started);
+            $this->playerCareer->upsertCareerHistoryFromSeasonStats($playerId, $seasonId);
 
             // بررسی باز شدن Ability
             $this->checkAbilityUnlock($playerId);
         }
     }
 
-    private function updateSeasonStats(int $playerId, ?array $rating): void {
+    private function updateSeasonStats(int $playerId, int $seasonId, ?array $rating, int $minutesPlayed, bool $started): void {
         if (!$rating) return;
 
-        $seasonId = $this->getCurrentSeasonId();
         $existing = $this->db->fetchOne(
             "SELECT * FROM player_season_stats WHERE player_id = ? AND season_id = ?",
             [$playerId, $seasonId]
@@ -559,13 +612,21 @@ class MatchEngine {
             $this->db->query(
                 "UPDATE player_season_stats 
                  SET appearances = appearances + 1,
+                     starts = starts + :starts,
+                     minutes_played = minutes_played + :minutes_played,
                      goals = goals + :goals,
                      assists = assists + :assists,
+                     yellow_cards = yellow_cards + :yellow_cards,
+                     red_cards = red_cards + :red_cards,
                      avg_rating = ((avg_rating * appearances) + :rating) / (appearances + 1)
                  WHERE player_id = :pid AND season_id = :sid",
                 [
+                    'starts' => $started ? 1 : 0,
+                    'minutes_played' => $minutesPlayed,
                     'goals' => $rating['goals'],
                     'assists' => $rating['assists'],
+                    'yellow_cards' => (int)($rating['yellow_cards'] ?? 0),
+                    'red_cards' => (int)($rating['red_cards'] ?? 0),
                     'rating' => $rating['rating'],
                     'pid' => $playerId,
                     'sid' => $seasonId
@@ -577,8 +638,12 @@ class MatchEngine {
                 'season_id' => $seasonId,
                 'club_id' => $this->getPlayerClubId($playerId),
                 'appearances' => 1,
+                'starts' => $started ? 1 : 0,
+                'minutes_played' => $minutesPlayed,
                 'goals' => $rating['goals'],
                 'assists' => $rating['assists'],
+                'yellow_cards' => (int)($rating['yellow_cards'] ?? 0),
+                'red_cards' => (int)($rating['red_cards'] ?? 0),
                 'avg_rating' => $rating['rating']
             ]);
         }

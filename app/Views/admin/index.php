@@ -14,6 +14,8 @@
 <div class="card">
     <a class="btn" href="/admin/clubs/create">➕ ایجاد باشگاه</a>
     <a class="btn btn-success" href="/admin/players/create">➕ ایجاد بازیکن</a>
+    <a class="btn" href="/admin/competitions">🏆 مدیریت رقابت‌ها و فصل‌ها</a>
+    <a class="btn" href="/admin/match-operations">🛠️ عملیات مسابقات و چرخه روزانه</a>
 </div>
 
 <?php require __DIR__ . '/../layout/footer.php'; ?>
