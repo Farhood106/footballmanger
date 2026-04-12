@@ -59,7 +59,7 @@ class PlayerModel extends BaseModel {
     }
 
     public function updateCondition(int $playerId, array $data): bool {
-        $allowed = ['form', 'fatigue', 'morale', 'is_injured', 'injury_days'];
+        $allowed = ['form', 'fatigue', 'morale', 'fitness', 'morale_score', 'is_injured', 'injury_days'];
         $update = array_intersect_key($data, array_flip($allowed));
         return $this->update($playerId, $update);
     }
@@ -67,9 +67,10 @@ class PlayerModel extends BaseModel {
     public function recoverFatigue(int $clubId, int $amount = 10): void {
         $this->db->query(
             "UPDATE players
-             SET fatigue = GREATEST(0, fatigue - ?)
+             SET fatigue = GREATEST(0, fatigue - ?),
+                 fitness = LEAST(100, fitness + ?)
              WHERE club_id = ? AND is_retired = 0",
-            [$amount, $clubId]
+            [$amount, (int)max(1, floor($amount / 2)), $clubId]
         );
     }
 
@@ -97,8 +98,9 @@ class PlayerModel extends BaseModel {
                 SUM(goals) AS career_goals,
                 SUM(assists) AS career_assists,
                 SUM(appearances) AS career_apps,
+                SUM(minutes_played) AS career_minutes,
                 AVG(avg_rating) AS career_rating
-             FROM player_season_stats
+             FROM player_career_history
              WHERE player_id = ?",
             [$playerId]
         ) ?? [];

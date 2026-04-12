@@ -31,6 +31,9 @@ class DailyCycleOrchestrator {
 
         $states = $this->initializeClubStates($cycleDate);
         $vacancySync = $this->aiClubManager->syncVacancyStatesForAllClubs();
+        $career = new PlayerCareerService($this->db);
+        $career->applyDailyRecoveryAndDrift();
+        $development = $career->runDailyDevelopmentAndValuation($cycleDate);
         $finance = new FinanceService($this->db);
         $salaryPosting = $finance->postCoachSalariesForCycle($cycleDate);
 
@@ -45,6 +48,7 @@ class DailyCycleOrchestrator {
             'ai_preparation' => [],
             'salary_postings' => $salaryPosting['posted'] ?? 0,
             'vacancy_sync' => $vacancySync['synced'] ?? 0,
+            'development_adjustments' => $development['adjusted'] ?? 0,
         ];
 
         foreach ($states as $state) {

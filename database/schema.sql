@@ -131,6 +131,8 @@ CREATE TABLE players (
     form DECIMAL(3,1) DEFAULT 6.5,
     fatigue INT DEFAULT 0,
     morale DECIMAL(3,1) DEFAULT 7.0,
+    fitness INT DEFAULT 100,
+    morale_score INT DEFAULT 70,
 
     wage INT DEFAULT 0,
     contract_end DATE,
@@ -395,17 +397,40 @@ CREATE TABLE player_season_stats (
     season_id INT NOT NULL,
     club_id INT NOT NULL,
     appearances INT DEFAULT 0,
+    starts INT DEFAULT 0,
+    minutes_played INT DEFAULT 0,
     goals INT DEFAULT 0,
     assists INT DEFAULT 0,
     yellow_cards INT DEFAULT 0,
     red_cards INT DEFAULT 0,
     avg_rating DECIMAL(3,1) DEFAULT 0,
-    minutes_played INT DEFAULT 0,
     clean_sheets INT DEFAULT 0,
     FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
     FOREIGN KEY (season_id) REFERENCES seasons(id) ON DELETE CASCADE,
     FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
     UNIQUE KEY unique_player_season_club (player_id, season_id, club_id)
+) ENGINE=InnoDB;
+
+-- Player career history (season-by-season per club)
+CREATE TABLE IF NOT EXISTS player_career_history (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    player_id INT NOT NULL,
+    season_id INT NOT NULL,
+    club_id INT NOT NULL,
+    appearances INT DEFAULT 0,
+    starts INT DEFAULT 0,
+    minutes_played INT DEFAULT 0,
+    goals INT DEFAULT 0,
+    assists INT DEFAULT 0,
+    yellow_cards INT DEFAULT 0,
+    red_cards INT DEFAULT 0,
+    avg_rating DECIMAL(3,1) DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_player_season_club_history (player_id, season_id, club_id),
+    FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
+    FOREIGN KEY (season_id) REFERENCES seasons(id) ON DELETE CASCADE,
+    FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 -- Injuries
