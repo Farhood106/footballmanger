@@ -86,6 +86,8 @@ $router->post('/manager/offers/{id}/counter', 'ManagerHiringController@respondOf
 $router->get('/finance', 'FinanceController@index');
 $router->post('/finance/owner-funding', 'FinanceController@ownerFunding');
 $router->post('/finance/sponsors/add', 'FinanceController@addSponsor');
+$router->post('/finance/sponsors/update', 'FinanceController@updateSponsor');
+$router->post('/finance/sponsors/toggle', 'FinanceController@toggleSponsor');
 $router->post('/finance/sponsors/income', 'FinanceController@sponsorIncome');
 $router->post('/finance/admin-adjust', 'FinanceController@manualAdjust');
 

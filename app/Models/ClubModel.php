@@ -53,6 +53,16 @@ class ClubModel extends BaseModel {
         );
     }
 
+    public function getSponsors(int $clubId, bool $activeOnly = false): array {
+        $sql = "SELECT * FROM club_sponsors WHERE club_id = ?";
+        $params = [$clubId];
+        if ($activeOnly) {
+            $sql .= " AND is_active = 1";
+        }
+        $sql .= " ORDER BY FIELD(tier, 'main', 'secondary', 'minor'), is_active DESC, brand_name ASC";
+        return $this->db->fetchAll($sql, $params);
+    }
+
     public function getStanding(int $clubId, int $seasonId): ?array {
         return $this->db->fetchOne(
             "SELECT s.* FROM standings s WHERE s.club_id = ? AND s.season_id = ?",

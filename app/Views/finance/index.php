@@ -50,25 +50,48 @@
     </form>
 
     <table class="table">
-        <thead><tr><th>Brand</th><th>Tier</th><th>Details</th><th>Income</th></tr></thead>
+        <thead><tr><th>Brand</th><th>Tier</th><th>Status</th><th>Details</th><th>Manage</th><th>Income</th></tr></thead>
         <tbody>
         <?php foreach (($sponsors ?? []) as $s): ?>
             <tr>
                 <td><?= htmlspecialchars((string)$s['brand_name']) ?></td>
                 <td><?= htmlspecialchars((string)$s['tier']) ?></td>
+                <td><?= !empty($s['is_active']) ? 'Active' : 'Inactive' ?></td>
                 <td><?= htmlspecialchars((string)($s['description'] ?? '-')) ?></td>
+                <td>
+                    <form method="post" action="/finance/sponsors/update" style="margin-bottom:8px;">
+                        <input type="hidden" name="club_id" value="<?= (int)$selected_club_id ?>">
+                        <input type="hidden" name="sponsor_id" value="<?= (int)$s['id'] ?>">
+                        <input name="brand_name" value="<?= htmlspecialchars((string)$s['brand_name']) ?>" required>
+                        <select name="tier">
+                            <option value="main" <?= (($s['tier'] ?? '') === 'main') ? 'selected' : '' ?>>main</option>
+                            <option value="secondary" <?= (($s['tier'] ?? '') === 'secondary') ? 'selected' : '' ?>>secondary</option>
+                            <option value="minor" <?= (($s['tier'] ?? '') === 'minor') ? 'selected' : '' ?>>minor</option>
+                        </select>
+                        <input name="contact_link" value="<?= htmlspecialchars((string)($s['contact_link'] ?? '')) ?>" placeholder="Contact link">
+                        <input name="banner_url" value="<?= htmlspecialchars((string)($s['banner_url'] ?? '')) ?>" placeholder="Banner URL">
+                        <input name="description" value="<?= htmlspecialchars((string)($s['description'] ?? '')) ?>" placeholder="Short description">
+                        <label><input type="checkbox" name="is_active" value="1" <?= !empty($s['is_active']) ? 'checked' : '' ?>> Active</label>
+                        <button class="btn" type="submit">Save</button>
+                    </form>
+                    <form method="post" action="/finance/sponsors/toggle">
+                        <input type="hidden" name="club_id" value="<?= (int)$selected_club_id ?>">
+                        <input type="hidden" name="sponsor_id" value="<?= (int)$s['id'] ?>">
+                        <button class="btn" type="submit"><?= !empty($s['is_active']) ? 'Deactivate' : 'Activate' ?></button>
+                    </form>
+                </td>
                 <td>
                     <form method="post" action="/finance/sponsors/income">
                         <input type="hidden" name="club_id" value="<?= (int)$selected_club_id ?>">
                         <input type="hidden" name="sponsor_id" value="<?= (int)$s['id'] ?>">
                         <input type="number" min="1" name="amount" placeholder="Income" required>
                         <input type="text" name="note" placeholder="Note">
-                        <button class="btn" type="submit">Post Sponsor Income</button>
+                        <button class="btn" type="submit" <?= empty($s['is_active']) ? 'disabled' : '' ?>>Post Sponsor Income</button>
                     </form>
                 </td>
             </tr>
         <?php endforeach; ?>
-        <?php if (empty($sponsors)): ?><tr><td colspan="4">No sponsors yet.</td></tr><?php endif; ?>
+        <?php if (empty($sponsors)): ?><tr><td colspan="6">No sponsors yet.</td></tr><?php endif; ?>
         </tbody>
     </table>
 </div>

@@ -4,6 +4,7 @@
 class FinanceController extends Controller {
     private Database $db;
     private FinanceService $finance;
+    private const ALLOWED_TIERS = ['main', 'secondary', 'minor'];
 
     public function __construct() {
         parent::__construct();
@@ -52,17 +53,75 @@ class FinanceController extends Controller {
             $this->redirect('/finance?error=Unauthorized');
         }
 
+        $brandName = trim((string)($_POST['brand_name'] ?? ''));
+        $tier = $this->sanitizeTier((string)($_POST['tier'] ?? 'minor'));
+        if ($brandName === '') {
+            $this->redirect('/finance?club_id=' . $clubId . '&error=' . urlencode('Brand name is required.'));
+        }
+
         $this->db->insert('club_sponsors', [
             'club_id' => $clubId,
-            'tier' => trim((string)($_POST['tier'] ?? 'minor')),
-            'brand_name' => trim((string)($_POST['brand_name'] ?? 'Unknown Sponsor')),
+            'tier' => $tier,
+            'brand_name' => $brandName,
             'description' => trim((string)($_POST['description'] ?? '')),
-            'contact_link' => trim((string)($_POST['contact_link'] ?? '')) ?: null,
-            'banner_url' => trim((string)($_POST['banner_url'] ?? '')) ?: null,
+            'contact_link' => $this->sanitizeUrl((string)($_POST['contact_link'] ?? '')),
+            'banner_url' => $this->sanitizeUrl((string)($_POST['banner_url'] ?? '')),
             'is_active' => 1,
         ]);
 
         $this->redirect('/finance?club_id=' . $clubId . '&success=Sponsor added');
+    }
+
+    public function updateSponsor(): void {
+        $this->requireAuth();
+        $clubId = (int)($_POST['club_id'] ?? 0);
+        $sponsorId = (int)($_POST['sponsor_id'] ?? 0);
+        if (!$this->canManageClub($clubId)) {
+            $this->redirect('/finance?error=Unauthorized');
+        }
+        $sponsor = $this->db->fetchOne("SELECT id, club_id FROM club_sponsors WHERE id = ?", [$sponsorId]);
+        if (!$sponsor || (int)$sponsor['club_id'] !== $clubId) {
+            $this->redirect('/finance?club_id=' . $clubId . '&error=' . urlencode('Sponsor not found.'));
+        }
+
+        $brandName = trim((string)($_POST['brand_name'] ?? ''));
+        if ($brandName === '') {
+            $this->redirect('/finance?club_id=' . $clubId . '&error=' . urlencode('Brand name is required.'));
+        }
+
+        $this->db->execute(
+            "UPDATE club_sponsors
+             SET tier = ?, brand_name = ?, description = ?, contact_link = ?, banner_url = ?, is_active = ?
+             WHERE id = ?",
+            [
+                $this->sanitizeTier((string)($_POST['tier'] ?? 'minor')),
+                $brandName,
+                trim((string)($_POST['description'] ?? '')),
+                $this->sanitizeUrl((string)($_POST['contact_link'] ?? '')),
+                $this->sanitizeUrl((string)($_POST['banner_url'] ?? '')),
+                !empty($_POST['is_active']) ? 1 : 0,
+                $sponsorId
+            ]
+        );
+
+        $this->redirect('/finance?club_id=' . $clubId . '&success=Sponsor updated');
+    }
+
+    public function toggleSponsor(): void {
+        $this->requireAuth();
+        $clubId = (int)($_POST['club_id'] ?? 0);
+        $sponsorId = (int)($_POST['sponsor_id'] ?? 0);
+        if (!$this->canManageClub($clubId)) {
+            $this->redirect('/finance?error=Unauthorized');
+        }
+        $sponsor = $this->db->fetchOne("SELECT id, club_id, is_active FROM club_sponsors WHERE id = ?", [$sponsorId]);
+        if (!$sponsor || (int)$sponsor['club_id'] !== $clubId) {
+            $this->redirect('/finance?club_id=' . $clubId . '&error=' . urlencode('Sponsor not found.'));
+        }
+
+        $next = (int)($sponsor['is_active'] ?? 0) === 1 ? 0 : 1;
+        $this->db->execute("UPDATE club_sponsors SET is_active = ? WHERE id = ?", [$next, $sponsorId]);
+        $this->redirect('/finance?club_id=' . $clubId . '&success=' . urlencode($next === 1 ? 'Sponsor activated' : 'Sponsor deactivated'));
     }
 
     public function sponsorIncome(): void {
@@ -104,5 +163,26 @@ class FinanceController extends Controller {
             $this->redirect('/finance?club_id=' . $clubId . '&success=Operation completed');
         }
         $this->redirect('/finance?club_id=' . $clubId . '&error=' . urlencode((string)($result['error'] ?? 'Operation failed')));
+    }
+
+    private function sanitizeTier(string $tier): string {
+        $normalized = strtolower(trim($tier));
+        if (!in_array($normalized, self::ALLOWED_TIERS, true)) {
+            return 'minor';
+        }
+        return $normalized;
+    }
+
+    private function sanitizeUrl(string $url): ?string {
+        $value = trim($url);
+        if ($value === '') return null;
+        if (!filter_var($value, FILTER_VALIDATE_URL)) {
+            return null;
+        }
+        $scheme = strtolower((string)parse_url($value, PHP_URL_SCHEME));
+        if (!in_array($scheme, ['http', 'https'], true)) {
+            return null;
+        }
+        return $value;
     }
 }

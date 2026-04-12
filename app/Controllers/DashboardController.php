@@ -33,13 +33,15 @@ class DashboardController extends Controller {
         $recentMatches = $this->matchModel->getByClub($club['id'], 5);
         $notifications = $this->notificationModel->getForUser(Auth::id(), true);
         $finances = $this->clubModel->getFinances($club['id']);
+        $activeSponsors = $this->clubModel->getSponsors((int)$club['id'], true);
 
         $this->view('dashboard/index', [
             'club' => $clubDetails,
             'upcoming' => $upcomingMatches,
             'recent' => $recentMatches,
             'notifications' => $notifications,
-            'finances' => $finances
+            'finances' => $finances,
+            'active_sponsors' => $activeSponsors
         ]);
     }
 }

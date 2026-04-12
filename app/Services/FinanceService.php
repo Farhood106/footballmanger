@@ -166,6 +166,7 @@ class FinanceService {
         if ($amount <= 0) return ['ok' => false, 'error' => 'Sponsor income must be positive.'];
         $sponsor = $this->db->fetchOne("SELECT * FROM club_sponsors WHERE id = ? AND club_id = ?", [$sponsorId, $clubId]);
         if (!$sponsor) return ['ok' => false, 'error' => 'Sponsor not found for club.'];
+        if ((int)($sponsor['is_active'] ?? 0) !== 1) return ['ok' => false, 'error' => 'Sponsor is inactive.'];
 
         $normalizedNote = trim($note);
         $logicalKey = (string)$clubId . '|' . (string)$sponsorId . '|' . (string)$amount . '|' . mb_strtolower($normalizedNote) . '|' . date('Y-m-d');
