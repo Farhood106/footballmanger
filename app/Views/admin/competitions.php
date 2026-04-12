@@ -36,6 +36,57 @@
     </form>
 </div>
 
+<div class="card">
+    <h3>Champions Qualification Slots</h3>
+    <form method="post" action="/admin/qualifications/slots/save">
+        <div class="grid">
+            <div class="form-group">
+                <label>Source League Competition</label>
+                <select name="source_competition_id" required>
+                    <option value="">Select source</option>
+                    <?php foreach (($league_competitions ?? []) as $lc): ?>
+                        <option value="<?= (int)$lc['id'] ?>"><?= htmlspecialchars($lc['name']) ?> (<?= htmlspecialchars($lc['type']) ?>)</option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Target Champions Competition</label>
+                <select name="target_competition_id" required>
+                    <option value="">Select target</option>
+                    <?php foreach (($competitions ?? []) as $tc): ?>
+                        <?php if (($tc['type'] ?? '') === 'CHAMPIONS_LEAGUE'): ?>
+                            <option value="<?= (int)$tc['id'] ?>"><?= htmlspecialchars($tc['name']) ?></option>
+                        <?php endif; ?>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Slots</label>
+                <input type="number" name="slots" min="1" value="1" required>
+            </div>
+            <div class="form-group">
+                <label><input type="checkbox" name="is_active" value="1" checked> Active</label>
+            </div>
+        </div>
+        <button class="btn btn-success" type="submit">Save Qualification Slot</button>
+    </form>
+
+    <table class="table" style="margin-top:10px;">
+        <thead><tr><th>Source</th><th>Target</th><th>Slots</th><th>Active</th></tr></thead>
+        <tbody>
+        <?php foreach (($qualification_slots ?? []) as $slot): ?>
+            <tr>
+                <td><?= htmlspecialchars((string)$slot['source_competition_name']) ?></td>
+                <td><?= htmlspecialchars((string)$slot['target_competition_name']) ?></td>
+                <td><?= (int)$slot['slots'] ?></td>
+                <td><?= !empty($slot['is_active']) ? 'Yes' : 'No' ?></td>
+            </tr>
+        <?php endforeach; ?>
+        <?php if (empty($qualification_slots)): ?><tr><td colspan="4">No qualification slots configured.</td></tr><?php endif; ?>
+        </tbody>
+    </table>
+</div>
+
 <?php foreach (($competitions ?? []) as $c): ?>
 <div class="card" style="margin-bottom:14px;">
     <h3><?= htmlspecialchars($c['name']) ?> (<?= htmlspecialchars($c['type']) ?>)</h3>
@@ -89,6 +140,10 @@
                     <form method="post" action="/admin/seasons/<?= (int)$s['id'] ?>/fixtures/generate" style="display:inline-block;"><button class="btn btn-success">Generate Fixtures</button></form>
                     <form method="post" action="/admin/seasons/<?= (int)$s['id'] ?>/finalize" style="display:inline-block;"><button class="btn">Finalize Season</button></form>
                     <form method="post" action="/admin/seasons/<?= (int)$s['id'] ?>/rollover/apply" style="display:inline-block;"><button class="btn">Apply Rollover</button></form>
+                    <?php if (($c['type'] ?? '') === 'CHAMPIONS_LEAGUE'): ?>
+                        <form method="post" action="/admin/seasons/<?= (int)$s['id'] ?>/qualifications/preview" style="display:inline-block;"><button class="btn">Preview Qualification</button></form>
+                        <form method="post" action="/admin/seasons/<?= (int)$s['id'] ?>/qualifications/apply" style="display:inline-block;"><button class="btn">Apply Qualification</button></form>
+                    <?php endif; ?>
                     <a class="btn" href="/admin/seasons/<?= (int)$s['id'] ?>/fixtures">View Fixtures</a>
                 </td>
             </tr>
@@ -122,6 +177,27 @@
                             <div>Relegated: <?= implode(', ', array_map(fn($r) => $r['club_name'] ?? ('#' . ($r['club_id'] ?? '?')), $plan['relegated'] ?? [])) ?: '-' ?></div>
                             <div>Direct: <?= implode(', ', array_map(fn($r) => $r['club_name'] ?? ('#' . ($r['club_id'] ?? '?')), $plan['direct'] ?? [])) ?: '-' ?></div>
                             <div>Status: <?= htmlspecialchars((string)($roll['rollover_status'] ?? 'FINALIZED')) ?></div>
+                        </div>
+                    <?php endif; ?>
+
+                    <?php if (!empty($qualification_preview) && (int)($qualification_preview['target_season_id'] ?? 0) === (int)$s['id']): ?>
+                        <div class="card" style="margin-top:8px; background:#eef7ff;">
+                            <strong>Qualification Preview:</strong>
+                            <?php if (!empty($qualification_preview['ok'])): ?>
+                                <div>Qualified Clubs: <?= (int)count($qualification_preview['qualified'] ?? []) ?></div>
+                                <ul>
+                                    <?php foreach (($qualification_preview['qualified'] ?? []) as $q): ?>
+                                        <li><?= htmlspecialchars((string)$q['source_competition_name']) ?> #<?= (int)$q['position'] ?> → <?= htmlspecialchars((string)$q['club_name']) ?> (<?= htmlspecialchars((string)$q['entry_type']) ?>)</li>
+                                    <?php endforeach; ?>
+                                </ul>
+                                <?php foreach (($qualification_preview['by_source'] ?? []) as $source): ?>
+                                    <?php if (!empty($source['error'])): ?>
+                                        <div><?= htmlspecialchars((string)$source['source_competition_name']) ?>: <?= htmlspecialchars((string)$source['error']) ?></div>
+                                    <?php endif; ?>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <div><?= htmlspecialchars((string)($qualification_preview['error'] ?? 'Qualification preview failed.')) ?></div>
+                            <?php endif; ?>
                         </div>
                     <?php endif; ?>
                     <form method="post" action="/admin/seasons/<?= (int)$s['id'] ?>/participants/add">

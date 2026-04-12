@@ -9,6 +9,7 @@ class AdminCompetitionService {
     public function __construct(?Database $db = null) {
         $this->db = $db ?? Database::getInstance();
         $this->ensureRolloverTable();
+        $this->ensureQualificationSlotsTable();
     }
 
     public function listCompetitionsWithSeasons(): array {
@@ -37,6 +38,217 @@ class AdminCompetitionService {
 
     public function listClubs(): array {
         return $this->db->fetchAll("SELECT id, name FROM clubs ORDER BY name ASC");
+    }
+
+    public function listLeagueCompetitions(): array {
+        return $this->db->fetchAll(
+            "SELECT id, name, type FROM competitions
+             WHERE type IN ('LEAGUE', 'CHAMPIONS_LEAGUE')
+             ORDER BY type, level, name"
+        );
+    }
+
+    public function listQualificationSlots(): array {
+        return $this->db->fetchAll(
+            "SELECT qs.*,
+                    sc.name AS source_competition_name,
+                    tc.name AS target_competition_name
+             FROM competition_qualification_slots qs
+             JOIN competitions sc ON sc.id = qs.source_competition_id
+             JOIN competitions tc ON tc.id = qs.target_competition_id
+             ORDER BY tc.name ASC, sc.level ASC, sc.name ASC"
+        );
+    }
+
+    public function saveQualificationSlot(int $sourceCompetitionId, int $targetCompetitionId, int $slots, bool $isActive): array {
+        if ($sourceCompetitionId <= 0 || $targetCompetitionId <= 0 || $slots <= 0) {
+            return ['ok' => false, 'error' => 'Source, target and slot count are required.'];
+        }
+        if ($sourceCompetitionId === $targetCompetitionId) {
+            return ['ok' => false, 'error' => 'Source and target competitions must differ.'];
+        }
+
+        $source = $this->db->fetchOne("SELECT id, type FROM competitions WHERE id = ?", [$sourceCompetitionId]);
+        $target = $this->db->fetchOne("SELECT id, type FROM competitions WHERE id = ?", [$targetCompetitionId]);
+        if (!$source || !$target) {
+            return ['ok' => false, 'error' => 'Competition not found.'];
+        }
+        if (!in_array((string)$source['type'], ['LEAGUE', 'CHAMPIONS_LEAGUE'], true)) {
+            return ['ok' => false, 'error' => 'Source competition must be league-style.'];
+        }
+        if ((string)$target['type'] !== 'CHAMPIONS_LEAGUE') {
+            return ['ok' => false, 'error' => 'Target competition must be CHAMPIONS_LEAGUE.'];
+        }
+
+        $existing = $this->db->fetchOne(
+            "SELECT id FROM competition_qualification_slots WHERE source_competition_id = ? AND target_competition_id = ?",
+            [$sourceCompetitionId, $targetCompetitionId]
+        );
+        if ($existing) {
+            $this->db->execute(
+                "UPDATE competition_qualification_slots
+                 SET slots = ?, is_active = ?, updated_at = NOW()
+                 WHERE id = ?",
+                [max(1, $slots), $isActive ? 1 : 0, (int)$existing['id']]
+            );
+            return ['ok' => true, 'updated' => true];
+        }
+
+        $this->db->insert('competition_qualification_slots', [
+            'source_competition_id' => $sourceCompetitionId,
+            'target_competition_id' => $targetCompetitionId,
+            'slots' => max(1, $slots),
+            'is_active' => $isActive ? 1 : 0,
+        ]);
+        return ['ok' => true, 'updated' => false];
+    }
+
+    public function previewChampionsQualification(int $targetSeasonId): array {
+        $targetSeason = $this->db->fetchOne("SELECT * FROM seasons WHERE id = ?", [$targetSeasonId]);
+        if (!$targetSeason) {
+            return ['ok' => false, 'error' => 'Target season not found.'];
+        }
+
+        $targetCompetition = $this->db->fetchOne("SELECT * FROM competitions WHERE id = ?", [(int)$targetSeason['competition_id']]);
+        if (!$targetCompetition || (string)$targetCompetition['type'] !== 'CHAMPIONS_LEAGUE') {
+            return ['ok' => false, 'error' => 'Target season must belong to a CHAMPIONS_LEAGUE competition.'];
+        }
+
+        $configs = $this->db->fetchAll(
+            "SELECT qs.*, c.name AS source_name
+             FROM competition_qualification_slots qs
+             JOIN competitions c ON c.id = qs.source_competition_id
+             WHERE qs.target_competition_id = ? AND qs.is_active = 1
+             ORDER BY c.level ASC, c.name ASC",
+            [(int)$targetCompetition['id']]
+        );
+        if (empty($configs)) {
+            return ['ok' => false, 'error' => 'No active qualification slot configuration found for this target competition.'];
+        }
+
+        $qualified = [];
+        $bySource = [];
+        foreach ($configs as $cfg) {
+            $sourceCompetitionId = (int)$cfg['source_competition_id'];
+            $sourceSeason = $this->db->fetchOne(
+                "SELECT * FROM seasons
+                 WHERE competition_id = ? AND status = 'FINISHED' AND end_date <= ?
+                 ORDER BY end_date DESC, id DESC
+                 LIMIT 1",
+                [$sourceCompetitionId, (string)$targetSeason['start_date']]
+            );
+
+            if (!$sourceSeason) {
+                $bySource[] = [
+                    'source_competition_id' => $sourceCompetitionId,
+                    'source_competition_name' => $cfg['source_name'],
+                    'slots' => (int)$cfg['slots'],
+                    'qualified' => [],
+                    'error' => 'No finished source season before target start date.'
+                ];
+                continue;
+            }
+
+            $completion = $this->isSeasonCompletedForQualification((int)$sourceSeason['id']);
+            if (!$completion['ok']) {
+                $bySource[] = [
+                    'source_competition_id' => $sourceCompetitionId,
+                    'source_competition_name' => $cfg['source_name'],
+                    'slots' => (int)$cfg['slots'],
+                    'qualified' => [],
+                    'error' => $completion['error'] ?? 'Source season not complete.'
+                ];
+                continue;
+            }
+
+            $standings = $this->getOrderedStandings((int)$sourceSeason['id']);
+            $top = array_slice($standings, 0, max(1, (int)$cfg['slots']));
+            $rows = [];
+            foreach ($top as $rank => $club) {
+                $row = [
+                    'club_id' => (int)$club['club_id'],
+                    'club_name' => (string)($club['club_name'] ?? ('Club #' . (int)$club['club_id'])),
+                    'position' => $rank + 1,
+                    'source_season_id' => (int)$sourceSeason['id'],
+                    'source_competition_id' => $sourceCompetitionId,
+                    'source_competition_name' => $cfg['source_name'],
+                    'entry_type' => ($rank === 0 ? 'champion' : 'qualified'),
+                ];
+                $rows[] = $row;
+                $qualified[] = $row;
+            }
+
+            $bySource[] = [
+                'source_competition_id' => $sourceCompetitionId,
+                'source_competition_name' => $cfg['source_name'],
+                'source_season_id' => (int)$sourceSeason['id'],
+                'slots' => (int)$cfg['slots'],
+                'qualified' => $rows,
+                'error' => null
+            ];
+        }
+
+        $unique = [];
+        foreach ($qualified as $row) {
+            $cid = (int)$row['club_id'];
+            if (!isset($unique[$cid])) {
+                $unique[$cid] = $row;
+            } else {
+                if (($unique[$cid]['entry_type'] ?? 'qualified') !== 'champion' && $row['entry_type'] === 'champion') {
+                    $unique[$cid] = $row;
+                }
+            }
+        }
+
+        $qualifiedRows = array_values($unique);
+        usort($qualifiedRows, fn($a, $b) => strcmp((string)$a['source_competition_name'], (string)$b['source_competition_name']) ?: ((int)$a['position'] <=> (int)$b['position']));
+
+        return [
+            'ok' => true,
+            'target_season_id' => $targetSeasonId,
+            'target_competition_id' => (int)$targetCompetition['id'],
+            'target_competition_name' => (string)$targetCompetition['name'],
+            'by_source' => $bySource,
+            'qualified' => $qualifiedRows,
+        ];
+    }
+
+    public function applyChampionsQualification(int $targetSeasonId): array {
+        $preview = $this->previewChampionsQualification($targetSeasonId);
+        if (!($preview['ok'] ?? false)) {
+            return $preview;
+        }
+
+        $targetSeason = $this->db->fetchOne("SELECT * FROM seasons WHERE id = ?", [$targetSeasonId]);
+        if (!$targetSeason || in_array((string)$targetSeason['status'], ['ACTIVE', 'FINISHED'], true)) {
+            return ['ok' => false, 'error' => 'Target season must be UPCOMING for qualification apply.'];
+        }
+
+        $existing = $this->getSeasonParticipants($targetSeasonId);
+        foreach ($existing as $row) {
+            if (!in_array((string)($row['entry_type'] ?? ''), ['qualified', 'champion'], true)) {
+                return ['ok' => false, 'error' => 'Target season already has manual/non-qualification participants. Apply blocked for safety.'];
+            }
+        }
+
+        $inserted = 0;
+        foreach (($preview['qualified'] ?? []) as $club) {
+            $dup = $this->db->fetchOne(
+                "SELECT id FROM club_seasons WHERE season_id = ? AND club_id = ?",
+                [$targetSeasonId, (int)$club['club_id']]
+            );
+            if ($dup) {
+                continue;
+            }
+            $this->db->insert('club_seasons', [
+                'season_id' => $targetSeasonId,
+                'club_id' => (int)$club['club_id'],
+                'entry_type' => $club['entry_type'] === 'champion' ? 'champion' : 'qualified',
+            ]);
+            $inserted++;
+        }
+
+        return ['ok' => true, 'inserted' => $inserted, 'qualified' => count($preview['qualified'] ?? [])];
     }
 
     public static function entryTypes(): array {
@@ -585,6 +797,29 @@ class AdminCompetitionService {
         return array_map(fn($r) => (int)$r['club_id'], $rows);
     }
 
+    private function isSeasonCompletedForQualification(int $seasonId): array {
+        $season = $this->db->fetchOne("SELECT * FROM seasons WHERE id = ?", [$seasonId]);
+        if (!$season) {
+            return ['ok' => false, 'error' => 'Source season not found.'];
+        }
+        if (($season['status'] ?? '') !== 'FINISHED') {
+            return ['ok' => false, 'error' => 'Source season is not FINISHED.'];
+        }
+
+        $totalMatches = (int)($this->db->fetchOne("SELECT COUNT(*) AS c FROM matches WHERE season_id = ?", [$seasonId])['c'] ?? 0);
+        $finishedMatches = (int)($this->db->fetchOne("SELECT COUNT(*) AS c FROM matches WHERE season_id = ? AND status = 'FINISHED'", [$seasonId])['c'] ?? 0);
+        if ($totalMatches <= 0 || $finishedMatches !== $totalMatches) {
+            return ['ok' => false, 'error' => 'Source season matches are incomplete.'];
+        }
+
+        $standingsCount = (int)($this->db->fetchOne("SELECT COUNT(*) AS c FROM standings WHERE season_id = ?", [$seasonId])['c'] ?? 0);
+        if ($standingsCount <= 0) {
+            return ['ok' => false, 'error' => 'Source season standings are missing.'];
+        }
+
+        return ['ok' => true];
+    }
+
     private function ensureRolloverTable(): void {
         $this->db->execute(
             "CREATE TABLE IF NOT EXISTS season_rollover_logs (
@@ -597,6 +832,24 @@ class AdminCompetitionService {
                 finalized_at DATETIME NOT NULL,
                 applied_at DATETIME,
                 UNIQUE KEY uniq_season_rollover (season_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
+    }
+
+    private function ensureQualificationSlotsTable(): void {
+        $this->db->execute(
+            "CREATE TABLE IF NOT EXISTS competition_qualification_slots (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                source_competition_id INT NOT NULL,
+                target_competition_id INT NOT NULL,
+                slots INT NOT NULL DEFAULT 1,
+                is_active BOOLEAN DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY uniq_source_target (source_competition_id, target_competition_id),
+                INDEX idx_target_active (target_competition_id, is_active),
+                FOREIGN KEY (source_competition_id) REFERENCES competitions(id) ON DELETE CASCADE,
+                FOREIGN KEY (target_competition_id) REFERENCES competitions(id) ON DELETE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
         );
     }

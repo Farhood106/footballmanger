@@ -116,6 +116,9 @@ $router->post('/admin/seasons/{id}/end', 'AdminCompetitionController@endSeason')
 $router->post('/admin/seasons/{id}/fixtures/generate', 'AdminCompetitionController@generateFixtures');
 $router->post('/admin/seasons/{id}/finalize', 'AdminCompetitionController@finalizeSeason');
 $router->post('/admin/seasons/{id}/rollover/apply', 'AdminCompetitionController@applyRollover');
+$router->post('/admin/qualifications/slots/save', 'AdminCompetitionController@saveQualificationSlot');
+$router->post('/admin/seasons/{id}/qualifications/preview', 'AdminCompetitionController@previewQualifications');
+$router->post('/admin/seasons/{id}/qualifications/apply', 'AdminCompetitionController@applyQualifications');
 $router->post('/admin/seasons/{season_id}/participants/add', 'AdminCompetitionController@addParticipant');
 $router->post('/admin/seasons/{season_id}/participants/{club_id}/remove', 'AdminCompetitionController@removeParticipant');
 $router->get('/admin/seasons/{id}/fixtures', 'AdminCompetitionController@fixtures');

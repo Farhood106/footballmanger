@@ -17,6 +17,8 @@ class AdminCompetitionController extends Controller {
             'competitions' => $this->service->listCompetitionsWithSeasons(),
             'clubs' => $this->service->listClubs(),
             'entry_types' => AdminCompetitionService::entryTypes(),
+            'qualification_slots' => $this->service->listQualificationSlots(),
+            'league_competitions' => $this->service->listLeagueCompetitions(),
         ]);
     }
 
@@ -119,13 +121,42 @@ class AdminCompetitionController extends Controller {
         $this->view('admin/season-fixtures', ['fixtures' => $fixtures, 'season_id' => $id]);
     }
 
-    private function renderBack(array $result): void {
+    public function saveQualificationSlot(): void {
+        $this->requireAuth();
+        $this->requireAdmin();
+
+        $result = $this->service->saveQualificationSlot(
+            (int)($_POST['source_competition_id'] ?? 0),
+            (int)($_POST['target_competition_id'] ?? 0),
+            (int)($_POST['slots'] ?? 0),
+            !empty($_POST['is_active'])
+        );
+        $this->renderBack($result);
+    }
+
+    public function previewQualifications(int $targetSeasonId): void {
+        $this->requireAuth();
+        $this->requireAdmin();
+        $result = $this->service->previewChampionsQualification($targetSeasonId);
+        $this->renderBack($result, ['qualification_preview' => $result]);
+    }
+
+    public function applyQualifications(int $targetSeasonId): void {
+        $this->requireAuth();
+        $this->requireAdmin();
+        $result = $this->service->applyChampionsQualification($targetSeasonId);
+        $this->renderBack($result, ['qualification_preview' => $this->service->previewChampionsQualification($targetSeasonId)]);
+    }
+
+    private function renderBack(array $result, array $extra = []): void {
         $this->view('admin/competitions', [
             'competitions' => $this->service->listCompetitionsWithSeasons(),
             'clubs' => $this->service->listClubs(),
             'entry_types' => AdminCompetitionService::entryTypes(),
+            'qualification_slots' => $this->service->listQualificationSlots(),
+            'league_competitions' => $this->service->listLeagueCompetitions(),
             'success' => $result['ok'] ? 'Operation completed.' : null,
             'error' => $result['ok'] ? null : ($result['error'] ?? 'Operation failed.')
-        ]);
+        ] + $extra);
     }
 }
