@@ -4,6 +4,7 @@
 class MatchEngine {
     private Database $db;
     private PlayerCareerService $playerCareer;
+    private WorldHistoryService $history;
 
     // تأثیر تاکتیک‌ها روی هم (rock-paper-scissors style)
     private const TACTIC_MATRIX = [
@@ -23,6 +24,7 @@ class MatchEngine {
     public function __construct() {
         $this->db = Database::getInstance();
         $this->playerCareer = new PlayerCareerService($this->db);
+        $this->history = new WorldHistoryService($this->db);
     }
 
     public function simulate(int $matchId): array {
@@ -64,6 +66,9 @@ class MatchEngine {
         // ۱۰. آپدیت جدول
         $this->updateStandings($match, $homeGoals, $awayGoals);
 
+        // ۱۱. match/week awards
+        $this->recordMatchAwards($match, $homeSquad, $awaySquad, $ratings);
+
             return [
                 'match_id' => $matchId,
                 'home_score' => $homeGoals,
@@ -78,6 +83,35 @@ class MatchEngine {
             // rollback claim so the match can be retried safely
             $this->db->query("UPDATE matches SET status = 'SCHEDULED' WHERE id = ? AND status = 'LIVE'", [$matchId]);
             throw $e;
+        }
+    }
+
+    private function recordMatchAwards(array $match, array $homeSquad, array $awaySquad, array $ratings): void {
+        if (empty($ratings)) return;
+        usort($ratings, fn($a, $b) => ((float)$b['rating'] <=> (float)$a['rating']) ?: ((int)$a['player_id'] <=> (int)$b['player_id']));
+        $best = $ratings[0];
+        $playerClubMap = [];
+        foreach (array_slice($homeSquad, 0, 11) as $p) $playerClubMap[(int)$p['id']] = (int)$match['home_club_id'];
+        foreach (array_slice($awaySquad, 0, 11) as $p) $playerClubMap[(int)$p['id']] = (int)$match['away_club_id'];
+        $clubId = (int)($playerClubMap[(int)$best['player_id']] ?? 0);
+        $seasonId = (int)($match['season_id'] ?? 0);
+        if ($seasonId <= 0 || $clubId <= 0) return;
+        $season = $this->db->fetchOne("SELECT competition_id FROM seasons WHERE id = ?", [$seasonId]);
+        if (!$season) return;
+        $competitionId = (int)$season['competition_id'];
+        $week = (int)($match['week'] ?? 0);
+
+        $this->history->recordPlayerOfMatch((int)$match['id'], $seasonId, $competitionId, [
+            'player_id' => (int)$best['player_id'],
+            'club_id' => $clubId,
+            'rating' => (float)$best['rating']
+        ]);
+        if ($week > 0) {
+            $this->history->upsertWeeklyAwardFromMatch((int)$match['id'], $seasonId, $competitionId, $week, [
+                'player_id' => (int)$best['player_id'],
+                'club_id' => $clubId,
+                'score' => (float)$best['rating']
+            ]);
         }
     }
 
