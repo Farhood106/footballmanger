@@ -10,6 +10,7 @@
             <th>پست</th>
             <th>قدرت</th>
             <th>نقش</th>
+            <th>منشأ</th>
             <th>آخرین بازی</th>
             <th>هشدار</th>
             <th>جزئیات</th>
@@ -36,6 +37,16 @@
                 </form>
             </td>
             <td>
+                <?php if (!empty($p['academy_origin'])): ?>
+                    <span style="color:#1d4ed8; font-weight:700;">آکادمی باشگاه</span>
+                    <?php if (!empty($p['academy_intake_season_id'])): ?>
+                        <br><small>فصل <?= (int)$p['academy_intake_season_id'] ?></small>
+                    <?php endif; ?>
+                <?php else: ?>
+                    <span style="color:#666;">غیرآکادمی</span>
+                <?php endif; ?>
+            </td>
+            <td>
                 <?php if (!empty($p['last_played_at'])): ?>
                     <div><?= htmlspecialchars((string)$p['last_played_at']) ?></div>
                     <small><?= (int)($p['recent_minutes'] ?? 0) ?> دقیقه</small>
@@ -60,6 +71,32 @@
         </tr>
         <?php endforeach; ?>
     </table>
+</div>
+
+<div class="card">
+    <h2>ورودی‌های اخیر آکادمی</h2>
+    <?php if (empty($youth_intakes ?? [])): ?>
+        <p>در این فصل ثبت ورودی آکادمی وجود ندارد.</p>
+    <?php else: ?>
+        <table class="table">
+            <tr>
+                <th>فصل</th>
+                <th>کلید رویداد</th>
+                <th>سطح آکادمی</th>
+                <th>تعداد تولید</th>
+                <th>زمان</th>
+            </tr>
+            <?php foreach (($youth_intakes ?? []) as $intake): ?>
+            <tr>
+                <td><?= htmlspecialchars((string)($intake['season_name'] ?? $intake['intake_season_id'] ?? '-')) ?></td>
+                <td><?= htmlspecialchars((string)($intake['intake_key'] ?? '-')) ?></td>
+                <td><?= (int)($intake['academy_level'] ?? 1) ?></td>
+                <td><?= (int)($intake['generated_count'] ?? 0) ?></td>
+                <td><?= htmlspecialchars((string)($intake['created_at'] ?? '-')) ?></td>
+            </tr>
+            <?php endforeach; ?>
+        </table>
+    <?php endif; ?>
 </div>
 
 <div class="card">

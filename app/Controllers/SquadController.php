@@ -5,12 +5,14 @@ class SquadController extends Controller {
     private ClubModel $clubModel;
     private PlayerModel $playerModel;
     private TacticModel $tacticModel;
+    private YouthIntakeService $youthIntake;
 
     public function __construct() {
         parent::__construct();
         $this->clubModel = new ClubModel();
         $this->playerModel = new PlayerModel();
         $this->tacticModel = new TacticModel();
+        $this->youthIntake = new YouthIntakeService();
     }
 
     public function index(): void {
@@ -22,6 +24,7 @@ class SquadController extends Controller {
         $squad = $this->clubModel->getSquad($club['id']);
         $injured = $this->playerModel->getInjured($club['id']);
         $roleLabels = $this->playerModel->getSquadRoleLabels();
+        $recentYouthIntakes = $this->youthIntake->getRecentClubIntakeLogs((int)$club['id'], 8);
 
         $squad = array_map(function (array $player) use ($roleLabels): array {
             $fullName = trim((string)($player['full_name'] ?? (($player['first_name'] ?? '') . ' ' . ($player['last_name'] ?? ''))));
@@ -42,6 +45,9 @@ class SquadController extends Controller {
                 'days_since_played' => $daysSince,
                 'inactivity_warning' => $inactivityWarning,
                 'overused_warning' => $overusedWarning,
+                'academy_origin' => !empty($player['is_academy_origin']),
+                'academy_origin_club_id' => $player['academy_origin_club_id'] ?? null,
+                'academy_intake_season_id' => $player['academy_intake_season_id'] ?? null,
             ]);
         }, $squad);
 
@@ -50,6 +56,7 @@ class SquadController extends Controller {
             'squad' => $squad,
             'injured' => $injured,
             'role_labels' => $roleLabels,
+            'youth_intakes' => $recentYouthIntakes,
         ]);
     }
 

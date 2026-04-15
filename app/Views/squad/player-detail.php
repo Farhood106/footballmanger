@@ -12,6 +12,9 @@
                 <tr><th>قدرت کلی</th><td><?= $player['overall'] ?></td></tr>
                 <tr><th>استعداد</th><td><?= $player['potential'] ?></td></tr>
                 <tr><th>نقش در تیم</th><td><?= htmlspecialchars((string)(($role_labels[$player['squad_role'] ?? 'ROTATION'] ?? ($player['squad_role'] ?? 'ROTATION')))) ?></td></tr>
+                <tr><th>منشأ آکادمی</th><td><?= !empty($player['is_academy_origin']) ? 'بله' : 'خیر' ?></td></tr>
+                <tr><th>باشگاه آکادمی</th><td><?= !empty($player['academy_origin_club_id']) ? (int)$player['academy_origin_club_id'] : '-' ?></td></tr>
+                <tr><th>فصل ورودی آکادمی</th><td><?= !empty($player['academy_intake_season_id']) ? (int)$player['academy_intake_season_id'] : '-' ?></td></tr>
                 <tr><th>آخرین بازی</th><td><?= !empty($player['last_played_at']) ? htmlspecialchars((string)$player['last_played_at']) : 'ثبت نشده' ?></td></tr>
                 <tr><th>دقایق آخرین بازی</th><td><?= (int)($player['last_minutes_played'] ?? 0) ?></td></tr>
                 <tr><th>ارزش</th><td><?= number_format($player['market_value']) ?> $</td></tr>

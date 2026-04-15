@@ -148,6 +148,10 @@ CREATE TABLE players (
     injury_days INT DEFAULT 0,
     is_on_loan BOOLEAN DEFAULT FALSE,
     is_retired BOOLEAN DEFAULT FALSE,
+    is_academy_origin BOOLEAN DEFAULT 0,
+    academy_origin_club_id INT NULL,
+    academy_intake_season_id INT NULL,
+    academy_intake_batch_key VARCHAR(64) NULL,
 
     growth_rate DECIMAL(3,2) DEFAULT 1.00,
 
@@ -155,9 +159,26 @@ CREATE TABLE players (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE SET NULL,
+    FOREIGN KEY (academy_origin_club_id) REFERENCES clubs(id) ON DELETE SET NULL,
+    FOREIGN KEY (academy_intake_season_id) REFERENCES seasons(id) ON DELETE SET NULL,
     INDEX idx_club (club_id),
     INDEX idx_position (position),
     INDEX idx_overall (overall)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS youth_intake_logs (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    club_id INT NOT NULL,
+    intake_season_id INT NOT NULL,
+    intake_key VARCHAR(64) NOT NULL,
+    academy_level INT NOT NULL DEFAULT 1,
+    generated_count INT NOT NULL DEFAULT 0,
+    generated_player_ids_json JSON NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_club_season_intake (club_id, intake_season_id, intake_key),
+    INDEX idx_intake_club_created (club_id, created_at),
+    FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
+    FOREIGN KEY (intake_season_id) REFERENCES seasons(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 -- Abilities

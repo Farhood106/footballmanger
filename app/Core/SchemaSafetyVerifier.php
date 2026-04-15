@@ -88,6 +88,7 @@ class SchemaSafetyVerifier {
             'club_manager_applications',
             'manager_contract_negotiations',
             'manager_contract_terminations',
+            'youth_intake_logs',
             'club_sponsors',
             'club_owner_funding_events',
             'club_facilities',
@@ -105,10 +106,11 @@ class SchemaSafetyVerifier {
 
     private static function requiredColumns(): array {
         return [
-            'players' => ['fitness', 'morale_score', 'is_transfer_listed', 'asking_price', 'transfer_listed_at', 'squad_role', 'last_played_at', 'last_minutes_played'],
+            'players' => ['fitness', 'morale_score', 'is_transfer_listed', 'asking_price', 'transfer_listed_at', 'squad_role', 'last_played_at', 'last_minutes_played', 'is_academy_origin', 'academy_origin_club_id', 'academy_intake_season_id', 'academy_intake_batch_key'],
             'transfers' => ['season_id', 'counter_fee', 'negotiation_round', 'countered_at', 'responded_at'],
             'club_finance_ledger' => ['meta_json', 'entry_type'],
             'club_manager_applications' => ['reviewed_by_user_id', 'rejection_reason', 'status'],
+            'youth_intake_logs' => ['intake_season_id', 'intake_key', 'academy_level', 'generated_count'],
             'player_season_stats' => ['starts'],
         ];
     }

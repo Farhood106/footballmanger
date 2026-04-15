@@ -235,6 +235,7 @@ class AdminCompetitionService {
 
         $inserted = 0;
         $history = new WorldHistoryService($this->db);
+        $youthIntake = new YouthIntakeService($this->db);
         foreach (($preview['qualified'] ?? []) as $club) {
             $dup = $this->db->fetchOne(
                 "SELECT id FROM club_seasons WHERE season_id = ? AND club_id = ?",
@@ -673,6 +674,21 @@ class AdminCompetitionService {
                 $this->applyAssignmentsToSeason($lowerSeasonId, $plan['relegated'], 'relegated');
             }
 
+            $intakeTargets = [];
+            $intakeTargets[$currentNextSeasonId] = array_map(fn($r) => (int)$r['club_id'], $plan['direct'] ?? []);
+            if (!empty($upperSeasonId ?? null)) {
+                $intakeTargets[$upperSeasonId] = array_map(fn($r) => (int)$r['club_id'], $plan['promoted'] ?? []);
+            }
+            if (!empty($lowerSeasonId ?? null)) {
+                $intakeTargets[$lowerSeasonId] = array_map(fn($r) => (int)$r['club_id'], $plan['relegated'] ?? []);
+            }
+            $intakeSummary = ['generated_players' => 0, 'clubs' => 0];
+            foreach ($intakeTargets as $targetSeasonId => $clubIds) {
+                $result = $youthIntake->generateForSeason($clubIds, (int)$targetSeasonId, 'ROLLOVER_APPLY');
+                $intakeSummary['generated_players'] += (int)($result['generated_players'] ?? 0);
+                $intakeSummary['clubs'] += (int)($result['clubs'] ?? 0);
+            }
+
             if (!empty($plan['promoted'])) {
                 foreach ($plan['promoted'] as $club) {
                     $posted = $finance->postSeasonReward((int)$club['club_id'], $seasonId, 250000, 'Promotion reward', 'PROMOTION');
@@ -703,7 +719,7 @@ class AdminCompetitionService {
             );
 
             $this->db->commit();
-            return ['ok' => true, 'plan' => $plan];
+            return ['ok' => true, 'plan' => $plan, 'youth_intake' => $intakeSummary];
         } catch (Throwable $e) {
             $this->db->rollBack();
             return ['ok' => false, 'error' => $e->getMessage()];
