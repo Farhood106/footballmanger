@@ -71,4 +71,54 @@
     <?php endif; ?>
 </div>
 
+<div class="card">
+    <h3>Youth Intake History</h3>
+    <?php if (empty($latest_intakes)): ?>
+        <p>No youth intake generated yet for this club.</p>
+    <?php else: ?>
+        <table class="table">
+            <tr>
+                <th>Season</th>
+                <th>Academy Level</th>
+                <th>Intake Count</th>
+                <th>Generated At</th>
+            </tr>
+            <?php foreach ($latest_intakes as $intake): ?>
+                <tr>
+                    <td><?= htmlspecialchars((string)($intake['season_name'] ?? ('#' . (int)$intake['season_id']))) ?></td>
+                    <td><?= (int)($intake['academy_level'] ?? 1) ?></td>
+                    <td><?= (int)($intake['intake_count'] ?? 0) ?></td>
+                    <td><small><?= htmlspecialchars((string)($intake['generated_at'] ?? '-')) ?></small></td>
+                </tr>
+            <?php endforeach; ?>
+        </table>
+    <?php endif; ?>
+</div>
+
+<div class="card">
+    <h3>Current Academy-Produced Players</h3>
+    <?php if (empty($academy_players)): ?>
+        <p>No academy-produced players in current squad.</p>
+    <?php else: ?>
+        <table class="table">
+            <tr>
+                <th>Name</th>
+                <th>Position</th>
+                <th>Overall / Potential</th>
+                <th>Market Value</th>
+                <th>Intake Season</th>
+            </tr>
+            <?php foreach ($academy_players as $player): ?>
+                <tr>
+                    <td><?= htmlspecialchars(trim((string)$player['first_name'] . ' ' . (string)$player['last_name'])) ?></td>
+                    <td><?= htmlspecialchars((string)$player['position']) ?></td>
+                    <td><?= (int)$player['overall'] ?> / <?= (int)$player['potential'] ?></td>
+                    <td>$<?= number_format((int)$player['market_value']) ?></td>
+                    <td>#<?= (int)($player['youth_intake_season_id'] ?? 0) ?></td>
+                </tr>
+            <?php endforeach; ?>
+        </table>
+    <?php endif; ?>
+</div>
+
 <?php require_once __DIR__ . '/../layout/footer.php'; ?>

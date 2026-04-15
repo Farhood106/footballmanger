@@ -36,6 +36,9 @@ class DailyCycleOrchestrator {
         $development = $career->runDailyDevelopmentAndValuation($cycleDate);
         $finance = new FinanceService($this->db);
         $salaryPosting = $finance->postCoachSalariesForCycle($cycleDate);
+        $playerWagePosting = $finance->postPlayerWagesForCycle($cycleDate);
+        $sponsorRecurring = $finance->postRecurringSponsorPayoutsForCycle($cycleDate);
+        $operatingCostPosting = $finance->postOperatingCostsForCycle($cycleDate);
         $facilities = new ClubFacilityService($this->db);
         $facilityMaintenance = $facilities->postDailyMaintenance($cycleDate);
 
@@ -49,6 +52,10 @@ class DailyCycleOrchestrator {
             'club_states' => [],
             'ai_preparation' => [],
             'salary_postings' => $salaryPosting['posted'] ?? 0,
+            'player_wage_postings' => $playerWagePosting['posted'] ?? 0,
+            'sponsor_recurring_postings' => $sponsorRecurring['posted'] ?? 0,
+            'operating_cost_postings' => $operatingCostPosting['posted'] ?? 0,
+            'recurring_economy_insufficient_balance' => (int)($playerWagePosting['insufficient_balance'] ?? 0) + (int)($operatingCostPosting['insufficient_balance'] ?? 0),
             'facility_maintenance_postings' => $facilityMaintenance['posted'] ?? 0,
             'vacancy_sync' => $vacancySync['synced'] ?? 0,
             'development_adjustments' => $development['adjusted'] ?? 0,
