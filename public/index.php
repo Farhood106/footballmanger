@@ -70,6 +70,7 @@ $router->get('/match/{id}', 'MatchController@detail');
 $router->get('/transfers', 'TransferController@market');
 $router->post('/transfer/listing', 'TransferController@setListed');
 $router->post('/transfer/bid', 'TransferController@makeBid');
+$router->post('/transfer/counter/{id}', 'TransferController@counterBid');
 $router->post('/transfer/accept/{id}', 'TransferController@acceptBid');
 $router->post('/transfer/reject/{id}', 'TransferController@rejectBid');
 

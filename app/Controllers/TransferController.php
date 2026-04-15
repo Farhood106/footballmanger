@@ -23,6 +23,13 @@ class TransferController extends Controller {
         $myTransfers = $this->transferModel->getByClub($clubId);
         $incomingOffers = $this->transferModel->getIncomingOffers($clubId);
         $mySquad = $this->clubModel->getSquad($clubId);
+        $playerContexts = [];
+        foreach ($availablePlayers as $p) {
+            $playerContexts[(int)$p['id']] = [
+                'pricing' => $this->transferModel->buildPricingContext($p),
+                'disposition' => $this->transferModel->getDispositionForPlayer($p),
+            ];
+        }
 
         $this->view('transfer/market', [
             'players' => $availablePlayers,
@@ -30,6 +37,7 @@ class TransferController extends Controller {
             'incoming_offers' => $incomingOffers,
             'squad' => $mySquad,
             'club_id' => $clubId,
+            'player_contexts' => $playerContexts,
         ]);
     }
 
@@ -60,14 +68,17 @@ class TransferController extends Controller {
             $this->json(['error' => 'بودجه کافی ندارید'], 400);
         }
 
-        $marketValue = max(1, (int)($player['market_value'] ?? 1));
-        $minAllowed = (int)floor($marketValue * 0.70);
-        $maxAllowed = (int)ceil($marketValue * 1.80);
+        $pricing = $this->transferModel->buildPricingContext($player);
+        $minAllowed = (int)$pricing['min_accept'];
+        $maxAllowed = (int)$pricing['max_reasonable'];
         if ($amount < $minAllowed || $amount > $maxAllowed) {
             $this->json(['error' => 'پیشنهاد باید در بازه منطقی ارزش بازار باشد'], 400);
         }
 
         $transferId = $this->transferModel->makeBid($playerId, $player['club_id'], $clubId, $amount);
+        if ($transferId <= 0) {
+            $this->json(['error' => 'امکان ثبت پیشنهاد وجود ندارد'], 400);
+        }
         $this->json(['success' => true, 'transfer_id' => $transferId]);
     }
 
@@ -80,7 +91,7 @@ class TransferController extends Controller {
         if (!$transfer) {
             $this->json(['error' => 'انتقال یافت نشد'], 404);
         }
-        if (!$this->canManageClub((int)$transfer['from_club_id'])) {
+        if (!$this->canRespondToOffer($transfer, true)) {
             $this->json(['error' => 'دسترسی غیرمجاز'], 403);
         }
 
@@ -101,12 +112,48 @@ class TransferController extends Controller {
         if (!$transfer) {
             $this->json(['error' => 'انتقال یافت نشد'], 404);
         }
-        if (!$this->canManageClub((int)$transfer['from_club_id'])) {
+        if (!$this->canRespondToOffer($transfer, false)) {
             $this->json(['error' => 'دسترسی غیرمجاز'], 403);
         }
 
         $this->transferModel->reject($transferId);
         $this->json(['success' => true, 'message' => 'پیشنهاد رد شد']);
+    }
+
+    public function counterBid(int $transferId): void {
+        if (!Auth::check()) {
+            $this->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $transfer = $this->transferModel->find($transferId);
+        if (!$transfer) {
+            $this->json(['error' => 'انتقال یافت نشد'], 404);
+        }
+        if ((string)($transfer['status'] ?? '') !== 'PENDING') {
+            $this->json(['error' => 'این پیشنهاد قابل کانتر نیست'], 400);
+        }
+        if (!$this->canManageClub((int)$transfer['from_club_id'])) {
+            $this->json(['error' => 'دسترسی غیرمجاز'], 403);
+        }
+
+        $counterFee = (int)($_POST['counter_fee'] ?? 0);
+        if ($counterFee <= 0) {
+            $this->json(['error' => 'مبلغ کانتر نامعتبر است'], 400);
+        }
+        $player = $this->playerModel->find((int)$transfer['player_id']);
+        if (!$player) {
+            $this->json(['error' => 'بازیکن یافت نشد'], 404);
+        }
+        $pricing = $this->transferModel->buildPricingContext($player);
+        if ($counterFee < (int)$pricing['min_accept'] || $counterFee > (int)$pricing['max_reasonable']) {
+            $this->json(['error' => 'کانتر باید در بازه منطقی باشد'], 400);
+        }
+
+        $ok = $this->transferModel->counter($transferId, (int)$transfer['from_club_id'], $counterFee);
+        if (!$ok) {
+            $this->json(['error' => 'ثبت کانتر با خطا مواجه شد'], 422);
+        }
+        $this->json(['success' => true, 'message' => 'پیشنهاد متقابل ثبت شد']);
     }
 
     public function setListed(): void {
@@ -137,5 +184,16 @@ class TransferController extends Controller {
         if (!$club) return false;
         $uid = (int)Auth::id();
         return (int)($club['owner_user_id'] ?? 0) === $uid || (int)($club['manager_user_id'] ?? 0) === $uid;
+    }
+
+    private function canRespondToOffer(array $transfer, bool $isAccept): bool {
+        $status = (string)($transfer['status'] ?? '');
+        if ($status === 'PENDING') {
+            return $this->canManageClub((int)$transfer['from_club_id']);
+        }
+        if ($status === 'COUNTERED') {
+            return $this->canManageClub((int)$transfer['to_club_id']);
+        }
+        return false;
     }
 }

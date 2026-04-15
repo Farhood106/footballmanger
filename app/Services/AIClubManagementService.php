@@ -98,7 +98,8 @@ class AIClubManagementService {
                  WHERE club_id = ? AND is_retired = 0",
                 [$clubId]
             );
-            return ['ok' => true, 'mode' => 'recovery'];
+            $market = $this->runDailyTransferMarket($clubId);
+            return ['ok' => true, 'mode' => 'recovery', 'market' => $market];
         }
 
         $this->db->execute(
@@ -109,7 +110,83 @@ class AIClubManagementService {
             [$clubId]
         );
 
-        return ['ok' => true, 'mode' => 'balanced'];
+        $market = $this->runDailyTransferMarket($clubId);
+        return ['ok' => true, 'mode' => 'balanced', 'market' => $market];
+    }
+
+    public function runDailyTransferMarket(int $clubId): array {
+        $transferModel = new TransferModel();
+        $listed = 0;
+        $responded = 0;
+        $bidPlaced = 0;
+
+        $candidates = $this->db->fetchAll(
+            "SELECT id, club_id, is_transfer_listed, market_value, wage, morale_score, squad_role, last_minutes_played, potential, overall
+             FROM players
+             WHERE club_id = ? AND is_retired = 0 AND is_injured = 0
+             ORDER BY overall ASC, id ASC
+             LIMIT 8",
+            [$clubId]
+        );
+        foreach ($candidates as $p) {
+            if ((int)($p['is_transfer_listed'] ?? 0) === 1) {
+                continue;
+            }
+            $role = strtoupper((string)($p['squad_role'] ?? 'ROTATION'));
+            $moraleScore = (int)($p['morale_score'] ?? 70);
+            $lastMinutes = (int)($p['last_minutes_played'] ?? 0);
+            $wage = (int)($p['wage'] ?? 0);
+            $canList = in_array($role, ['BENCH', 'PROSPECT', 'ROTATION'], true) && ($moraleScore < 58 || $lastMinutes <= 10 || $wage > 26000);
+            if ($canList) {
+                $asking = max(1, (int)round(((int)($p['market_value'] ?? 1)) * 1.03));
+                $transferModel->setTransferListed((int)$p['id'], $clubId, true, $asking);
+                $listed++;
+                if ($listed >= 2) {
+                    break;
+                }
+            }
+        }
+
+        $incoming = $transferModel->getIncomingOffers($clubId);
+        foreach ($incoming as $offer) {
+            if (($offer['status'] ?? '') !== 'PENDING') {
+                continue;
+            }
+            $decision = $transferModel->determineSellerDecision($offer, $offer);
+            if (($decision['action'] ?? '') === 'accept') {
+                $transferModel->accept((int)$offer['id']);
+            } elseif (($decision['action'] ?? '') === 'counter') {
+                $transferModel->counter((int)$offer['id'], $clubId, (int)($decision['counter_fee'] ?? 0));
+            } else {
+                $transferModel->reject((int)$offer['id']);
+            }
+            $responded++;
+        }
+
+        $club = $this->db->fetchOne("SELECT id, balance FROM clubs WHERE id = ?", [$clubId]);
+        if ((int)($club['balance'] ?? 0) > 1500000) {
+            $target = $this->db->fetchOne(
+                "SELECT p.*
+                 FROM players p
+                 JOIN clubs c ON c.id = p.club_id
+                 WHERE p.is_transfer_listed = 1
+                   AND p.club_id <> ?
+                   AND p.is_retired = 0
+                 ORDER BY p.morale_score ASC, p.last_minutes_played ASC, p.market_value ASC
+                 LIMIT 1",
+                [$clubId]
+            );
+            if ($target) {
+                $pricing = $transferModel->buildPricingContext($target);
+                $bid = (int)$pricing['min_accept'];
+                if ($bid > 0 && $bid < (int)$club['balance']) {
+                    $transferModel->makeBid((int)$target['id'], (int)$target['club_id'], $clubId, $bid);
+                    $bidPlaced = 1;
+                }
+            }
+        }
+
+        return ['listed' => $listed, 'responded' => $responded, 'bid_placed' => $bidPlaced];
     }
 
     public function ensureLineupForMatchPhase(int $clubId, string $lineupPhase): array {
