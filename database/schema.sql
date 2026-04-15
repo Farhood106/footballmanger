@@ -551,6 +551,28 @@ CREATE TABLE IF NOT EXISTS manager_contract_negotiations (
     INDEX idx_negotiation_owner_status (owner_user_id, status)
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS manager_contract_terminations (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    contract_id INT NOT NULL,
+    club_id INT NOT NULL,
+    owner_user_id INT NULL,
+    coach_user_id INT NULL,
+    terminated_by_user_id INT NOT NULL,
+    termination_type ENUM('OWNER_TERMINATION','MUTUAL_TERMINATION','ADMIN_FORCED_TERMINATION') NOT NULL,
+    compensation_amount BIGINT DEFAULT 0,
+    reason VARCHAR(1000),
+    governance_case_id INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_termination_contract (contract_id, created_at),
+    INDEX idx_termination_club (club_id, created_at),
+    FOREIGN KEY (contract_id) REFERENCES manager_contracts(id) ON DELETE CASCADE,
+    FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
+    FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (coach_user_id) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (terminated_by_user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (governance_case_id) REFERENCES club_governance_cases(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
 -- Governance: owner/coach dispute case
 CREATE TABLE IF NOT EXISTS club_governance_cases (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -594,7 +616,7 @@ CREATE TABLE IF NOT EXISTS club_finance_ledger (
     id INT AUTO_INCREMENT PRIMARY KEY,
     club_id INT NOT NULL,
     season_id INT,
-    entry_type ENUM('COACH_SALARY','MATCH_REWARD','SEASON_REWARD','GOVERNANCE_PENALTY','GOVERNANCE_COMPENSATION','TRANSFER_IN','TRANSFER_OUT','OWNER_FUNDING','SPONSOR_INCOME','MANUAL_ADMIN_ADJUSTMENT','FACILITY_UPGRADE','FACILITY_DOWNGRADE_REFUND','FACILITY_MAINTENANCE','WAGE','STAFF_WAGE','SPONSOR','TICKET','PRIZE','PENALTY','OTHER') NOT NULL,
+    entry_type ENUM('COACH_SALARY','MATCH_REWARD','SEASON_REWARD','GOVERNANCE_PENALTY','GOVERNANCE_COMPENSATION','TRANSFER_IN','TRANSFER_OUT','OWNER_FUNDING','SPONSOR_INCOME','MANUAL_ADMIN_ADJUSTMENT','FACILITY_UPGRADE','FACILITY_DOWNGRADE_REFUND','FACILITY_MAINTENANCE','MANAGER_TERMINATION_COMPENSATION','WAGE','STAFF_WAGE','SPONSOR','TICKET','PRIZE','PENALTY','OTHER') NOT NULL,
     amount BIGINT NOT NULL,
     description VARCHAR(500),
     reference_type VARCHAR(50),

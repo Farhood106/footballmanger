@@ -5,6 +5,7 @@ class ManagerApplicationModel extends BaseModel {
     protected string $table = 'club_manager_applications';
 
     private const NEGOTIATION_STATUSES = ['open', 'accepted', 'rejected', 'expired', 'superseded'];
+    private const TERMINATION_TYPES = ['OWNER_TERMINATION', 'MUTUAL_TERMINATION', 'ADMIN_FORCED_TERMINATION'];
 
     public function __construct() {
         parent::__construct();
@@ -69,6 +70,25 @@ class ManagerApplicationModel extends BaseModel {
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
         );
 
+        $this->db->execute(
+            "CREATE TABLE IF NOT EXISTS manager_contract_terminations (
+                id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                contract_id INT NOT NULL,
+                club_id INT NOT NULL,
+                owner_user_id INT NULL,
+                coach_user_id INT NULL,
+                terminated_by_user_id INT NOT NULL,
+                termination_type ENUM('OWNER_TERMINATION','MUTUAL_TERMINATION','ADMIN_FORCED_TERMINATION') NOT NULL,
+                compensation_amount BIGINT DEFAULT 0,
+                reason VARCHAR(1000),
+                governance_case_id INT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_termination_contract (contract_id, created_at),
+                INDEX idx_termination_club (club_id, created_at),
+                INDEX idx_termination_actor (terminated_by_user_id, created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
+
         $this->ensureColumnExists('club_manager_applications', 'rejection_reason', "VARCHAR(1000) NULL AFTER status");
         $this->renameColumnIfExists('club_manager_applications', 'reviewed_by', 'reviewed_by_user_id', 'INT NULL');
         $this->db->execute("UPDATE club_manager_applications SET status = LOWER(status)");
@@ -76,6 +96,7 @@ class ManagerApplicationModel extends BaseModel {
         $this->ensureUtf8ForTable('club_manager_expectations');
         $this->ensureUtf8ForTable('club_manager_applications');
         $this->ensureUtf8ForTable('manager_contract_negotiations');
+        $this->ensureUtf8ForTable('manager_contract_terminations');
     }
 
     public function upsertExpectation(int $clubId, int $ownerUserId, string $title, string $expectations, string $duties, string $commitments): void {
@@ -201,6 +222,169 @@ class ManagerApplicationModel extends BaseModel {
              ORDER BY n.created_at DESC",
             [$coachUserId]
         );
+    }
+
+    public function getActiveContractsForActor(int $actorUserId, bool $isAdmin): array {
+        if ($isAdmin) {
+            return $this->db->fetchAll(
+                "SELECT mc.*, c.name AS club_name, o.username AS owner_name, u.username AS coach_name
+                 FROM manager_contracts mc
+                 JOIN clubs c ON c.id = mc.club_id
+                 LEFT JOIN users o ON o.id = mc.owner_user_id
+                 LEFT JOIN users u ON u.id = mc.coach_user_id
+                 WHERE mc.status = 'ACTIVE'
+                 ORDER BY mc.id DESC"
+            );
+        }
+
+        return $this->db->fetchAll(
+            "SELECT mc.*, c.name AS club_name, o.username AS owner_name, u.username AS coach_name
+             FROM manager_contracts mc
+             JOIN clubs c ON c.id = mc.club_id
+             LEFT JOIN users o ON o.id = mc.owner_user_id
+             LEFT JOIN users u ON u.id = mc.coach_user_id
+             WHERE mc.status = 'ACTIVE' AND (mc.owner_user_id = ? OR mc.coach_user_id = ?)
+             ORDER BY mc.id DESC",
+            [$actorUserId, $actorUserId]
+        );
+    }
+
+    public function terminateActiveContract(
+        int $clubId,
+        int $actorUserId,
+        bool $isAdmin,
+        string $terminationType,
+        ?int $requestedCompensation,
+        string $reason,
+        bool $openGovernanceCase = false
+    ): array {
+        $terminationType = strtoupper(trim($terminationType));
+        if (!in_array($terminationType, self::TERMINATION_TYPES, true)) {
+            return ['ok' => false, 'error' => 'Invalid termination type.'];
+        }
+
+        $this->db->beginTransaction();
+        try {
+            $contract = $this->db->fetchOne(
+                "SELECT mc.*, c.manager_user_id
+                 FROM manager_contracts mc
+                 JOIN clubs c ON c.id = mc.club_id
+                 WHERE mc.club_id = ? AND mc.status = 'ACTIVE'
+                 ORDER BY mc.id DESC
+                 LIMIT 1 FOR UPDATE",
+                [$clubId]
+            );
+            if (!$contract) {
+                $this->db->rollBack();
+                return ['ok' => false, 'error' => 'No active manager contract found.'];
+            }
+
+            $ownerId = (int)($contract['owner_user_id'] ?? 0);
+            $coachId = (int)($contract['coach_user_id'] ?? 0);
+            $canOwner = $isAdmin || $actorUserId === $ownerId;
+            $canCoach = $isAdmin || $actorUserId === $coachId;
+
+            if ($terminationType === 'OWNER_TERMINATION' && !$canOwner) {
+                $this->db->rollBack();
+                return ['ok' => false, 'error' => 'Only owner/admin can perform owner termination.'];
+            }
+            if ($terminationType === 'MUTUAL_TERMINATION' && !($canOwner || $canCoach)) {
+                $this->db->rollBack();
+                return ['ok' => false, 'error' => 'Only owner/coach/admin can perform mutual termination.'];
+            }
+            if ($terminationType === 'ADMIN_FORCED_TERMINATION' && !$isAdmin) {
+                $this->db->rollBack();
+                return ['ok' => false, 'error' => 'Only admin can force termination.'];
+            }
+
+            $compensation = $this->resolveCompensationAmount($terminationType, (int)($contract['salary'] ?? 0), $requestedCompensation);
+            $reason = trim($reason);
+            if ($reason === '') {
+                $reason = $terminationType === 'MUTUAL_TERMINATION' ? 'Mutual termination agreed.' : 'Contract terminated by club.';
+            }
+
+            $this->db->execute(
+                "UPDATE manager_contracts
+                 SET status = 'TERMINATED',
+                     end_date = CURDATE(),
+                     termination_reason = ?,
+                     updated_at = NOW()
+                 WHERE id = ? AND status = 'ACTIVE'",
+                [$reason, (int)$contract['id']]
+            );
+
+            $this->db->execute(
+                "UPDATE clubs
+                 SET manager_user_id = NULL, user_id = NULL
+                 WHERE id = ? AND manager_user_id = ?",
+                [$clubId, $coachId]
+            );
+
+            $governanceCaseId = null;
+            if ($openGovernanceCase && $ownerId > 0 && $coachId > 0) {
+                $governanceCaseId = (int)$this->db->insert('club_governance_cases', [
+                    'club_id' => $clubId,
+                    'contract_id' => (int)$contract['id'],
+                    'owner_user_id' => $ownerId,
+                    'manager_user_id' => $coachId,
+                    'raised_by_user_id' => $actorUserId,
+                    'against_user_id' => $actorUserId === $ownerId ? $coachId : $ownerId,
+                    'case_type' => $terminationType === 'MUTUAL_TERMINATION' ? 'MUTUAL_TERMINATION_DISPUTE' : 'UNFAIR_DISMISSAL',
+                    'subject' => 'Manager contract termination review',
+                    'description' => $reason,
+                    'status' => 'open',
+                    'opened_at' => date('Y-m-d H:i:s'),
+                ]);
+            }
+
+            if ($compensation > 0) {
+                $finance = new FinanceService($this->db);
+                $post = $finance->postEntry(
+                    $clubId,
+                    'MANAGER_TERMINATION_COMPENSATION',
+                    -1 * $compensation,
+                    'Manager contract termination compensation',
+                    null,
+                    'MANAGER_CONTRACT_TERMINATION',
+                    (int)$contract['id'],
+                    [
+                        'termination_type' => $terminationType,
+                        'coach_user_id' => $coachId,
+                        'owner_user_id' => $ownerId,
+                    ],
+                    false
+                );
+                if (empty($post['ok'])) {
+                    $this->db->rollBack();
+                    return ['ok' => false, 'error' => $post['error'] ?? 'Compensation posting failed.'];
+                }
+            }
+
+            $this->db->insert('manager_contract_terminations', [
+                'contract_id' => (int)$contract['id'],
+                'club_id' => $clubId,
+                'owner_user_id' => $ownerId > 0 ? $ownerId : null,
+                'coach_user_id' => $coachId > 0 ? $coachId : null,
+                'terminated_by_user_id' => $actorUserId,
+                'termination_type' => $terminationType,
+                'compensation_amount' => $compensation,
+                'reason' => $reason,
+                'governance_case_id' => $governanceCaseId ?: null,
+            ]);
+
+            $this->db->execute(
+                "UPDATE manager_contract_negotiations
+                 SET status = 'superseded', responded_at = NOW()
+                 WHERE club_id = ? AND status = 'open'",
+                [$clubId]
+            );
+
+            $this->db->commit();
+            return ['ok' => true, 'compensation' => $compensation, 'governance_case_id' => $governanceCaseId];
+        } catch (Throwable $e) {
+            $this->db->rollBack();
+            return ['ok' => false, 'error' => $e->getMessage()];
+        }
     }
 
     public function sendOffer(
@@ -545,6 +729,18 @@ class ManagerApplicationModel extends BaseModel {
         );
 
         return ['ok' => true];
+    }
+
+    private function resolveCompensationAmount(string $terminationType, int $salaryPerCycle, ?int $requestedCompensation): int {
+        $requestedCompensation = $requestedCompensation ?? 0;
+        if ($terminationType === 'MUTUAL_TERMINATION') {
+            return max(0, $requestedCompensation);
+        }
+        if ($terminationType === 'ADMIN_FORCED_TERMINATION') {
+            return max(0, $requestedCompensation);
+        }
+        $baseline = (int)round(max(0, $salaryPerCycle) * 0.5);
+        return max(0, $requestedCompensation, $baseline);
     }
 
     private function ensureColumnExists(string $table, string $column, string $definition): void {

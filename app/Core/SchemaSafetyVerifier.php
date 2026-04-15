@@ -87,6 +87,7 @@ class SchemaSafetyVerifier {
             'club_manager_expectations',
             'club_manager_applications',
             'manager_contract_negotiations',
+            'manager_contract_terminations',
             'club_sponsors',
             'club_owner_funding_events',
             'club_facilities',
@@ -115,7 +116,7 @@ class SchemaSafetyVerifier {
     private static function requiredEnumTokens(): array {
         return [
             'club_finance_ledger' => [
-                'entry_type' => ['COACH_SALARY', 'SPONSOR_INCOME', 'FACILITY_MAINTENANCE', 'MANUAL_ADMIN_ADJUSTMENT']
+                'entry_type' => ['COACH_SALARY', 'SPONSOR_INCOME', 'FACILITY_MAINTENANCE', 'MANUAL_ADMIN_ADJUSTMENT', 'MANAGER_TERMINATION_COMPENSATION']
             ]
         ];
     }

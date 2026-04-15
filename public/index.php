@@ -98,6 +98,7 @@ $router->post('/manager/applications/offer', 'ManagerHiringController@sendOffer'
 $router->post('/manager/offers/{id}/accept', 'ManagerHiringController@respondOfferAccept');
 $router->post('/manager/offers/{id}/reject', 'ManagerHiringController@respondOfferReject');
 $router->post('/manager/offers/{id}/counter', 'ManagerHiringController@respondOfferCounter');
+$router->post('/manager/contracts/terminate', 'ManagerHiringController@terminateContract');
 
 
 
