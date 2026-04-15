@@ -8,8 +8,10 @@ class AdminCompetitionService {
 
     public function __construct(?Database $db = null) {
         $this->db = $db ?? Database::getInstance();
-        $this->ensureRolloverTable();
-        $this->ensureQualificationSlotsTable();
+        if ($this->db->shouldRunRuntimeDdlFallback()) {
+            $this->ensureRolloverTable();
+            $this->ensureQualificationSlotsTable();
+        }
     }
 
     public function listCompetitionsWithSeasons(): array {
@@ -685,15 +687,14 @@ class AdminCompetitionService {
                     $history->addClubHonor((int)$club['club_id'], $seasonId, (int)$competition['id'], 'RELEGATION', 'Relegated during rollover.');
                 }
             }
-            if (!empty($plan['direct'])) {
-                $champion = $plan['direct'][0] ?? null;
-                if ($champion) {
-                    $posted = $finance->postSeasonReward((int)$champion['club_id'], $seasonId, 500000, 'Title reward', 'TITLE');
+            $orderedStandings = $this->getOrderedStandings($seasonId);
+            $champion = $orderedStandings[0] ?? null;
+            if ($champion) {
+                $posted = $finance->postSeasonReward((int)$champion['club_id'], $seasonId, 500000, 'Title reward', 'TITLE');
                     if (empty($posted['ok'])) {
                         throw new RuntimeException($posted['error'] ?? 'Failed to post title reward.');
                     }
-                    $history->addClubHonor((int)$champion['club_id'], $seasonId, (int)$competition['id'], 'LEAGUE_TITLE', 'Finished season in 1st place.');
-                }
+                $history->addClubHonor((int)$champion['club_id'], $seasonId, (int)$competition['id'], 'LEAGUE_TITLE', 'Finished season in 1st place.');
             }
 
             $this->db->execute(

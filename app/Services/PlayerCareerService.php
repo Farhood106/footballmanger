@@ -4,12 +4,21 @@
 class PlayerCareerService {
     private Database $db;
     private ClubFacilityService $facilities;
+    private const ROLE_TARGET_MINUTES = [
+        'KEY_PLAYER' => 80,
+        'REGULAR_STARTER' => 65,
+        'ROTATION' => 40,
+        'BENCH' => 20,
+        'PROSPECT' => 10,
+    ];
 
     public function __construct(?Database $db = null) {
         $this->db = $db ?? Database::getInstance();
         $this->facilities = new ClubFacilityService($this->db);
-        $this->ensureReadinessColumns();
-        $this->ensureCareerHistoryTable();
+        if ($this->db->shouldRunRuntimeDdlFallback()) {
+            $this->ensureReadinessColumns();
+            $this->ensureCareerHistoryTable();
+        }
     }
 
     public static function computeDevelopmentSignal(
@@ -54,7 +63,7 @@ class PlayerCareerService {
 
     public function applyDailyRecoveryAndDrift(): array {
         $players = $this->db->fetchAll(
-            "SELECT id, club_id, fitness, morale_score, morale, is_injured
+            "SELECT id, club_id, fitness, morale_score, morale, is_injured, squad_role, last_played_at, last_minutes_played
              FROM players
              WHERE is_retired = 0
              ORDER BY id ASC"
@@ -68,7 +77,10 @@ class PlayerCareerService {
 
             $moraleScore = (int)($player['morale_score'] ?? 70);
             $moraleDrift = $moraleScore < 55 ? 2 : ($moraleScore > 75 ? -1 : 0);
-            $newMoraleScore = min(100, max(0, $moraleScore + $moraleDrift));
+            $role = $this->normalizeRole($player['squad_role'] ?? null);
+            $inactivityDelta = $this->inactivityMoraleDelta($role, $player['last_played_at'] ?? null);
+            $roleDelta = $this->roleExpectationDelta($role, (int)($player['last_minutes_played'] ?? 0));
+            $newMoraleScore = min(100, max(0, $moraleScore + $moraleDrift + $inactivityDelta + $roleDelta));
 
             $this->db->execute(
                 "UPDATE players
@@ -159,13 +171,18 @@ class PlayerCareerService {
         ?array $rating,
         bool $started,
         int $minutesPlayed,
-        bool $wasInjuredEvent
+        bool $wasInjuredEvent,
+        ?string $playedAt = null
     ): void {
         $playerId = (int)$player['id'];
         $fitness = (int)($player['fitness'] ?? max(0, 100 - (int)($player['fatigue'] ?? 0)));
         $moraleScore = (int)($player['morale_score'] ?? (int)round(((float)($player['morale'] ?? 7.0)) * 10));
+        $role = $this->normalizeRole($player['squad_role'] ?? null);
 
         $fitnessDrop = $started ? min(28, 10 + (int)floor($minutesPlayed / 8)) : max(0, (int)floor($minutesPlayed / 12));
+        if ($started) {
+            $fitnessDrop += $this->calculateStartLoadPressure($playerId);
+        }
         $newFitness = max(0, min(100, $fitness - $fitnessDrop));
 
         $result = (string)($rating['result'] ?? 'D');
@@ -173,13 +190,15 @@ class PlayerCareerService {
         $ratingScore = (int)round(((float)($rating['rating'] ?? 6.5) - 6.5) * 6);
         $playTimeDelta = $started ? 2 : ($minutesPlayed === 0 ? -2 : 0);
         $injuryDelta = $wasInjuredEvent ? -8 : 0;
-        $newMoraleScore = max(0, min(100, $moraleScore + $resultDelta + $ratingScore + $playTimeDelta + $injuryDelta));
+        $roleExpectationDelta = $this->roleExpectationDelta($role, $minutesPlayed);
+        $newMoraleScore = max(0, min(100, $moraleScore + $resultDelta + $ratingScore + $playTimeDelta + $injuryDelta + $roleExpectationDelta));
 
         $newForm = min(10.0, max(1.0, (((float)($player['form'] ?? 6.5) * 4) + (float)($rating['rating'] ?? 6.5)) / 5));
+        $playedAt = $playedAt ?: date('Y-m-d H:i:s');
 
         $this->db->execute(
             "UPDATE players
-             SET form = ?, fitness = ?, morale_score = ?, fatigue = ?, morale = ?
+             SET form = ?, fitness = ?, morale_score = ?, fatigue = ?, morale = ?, last_played_at = ?, last_minutes_played = ?
              WHERE id = ?",
             [
                 round($newForm, 1),
@@ -187,6 +206,8 @@ class PlayerCareerService {
                 $newMoraleScore,
                 max(0, min(100, 100 - $newFitness)),
                 round($newMoraleScore / 10, 1),
+                $minutesPlayed > 0 ? $playedAt : ($player['last_played_at'] ?? null),
+                $minutesPlayed > 0 ? $minutesPlayed : (int)($player['last_minutes_played'] ?? 0),
                 $playerId
             ]
         );
@@ -248,6 +269,62 @@ class PlayerCareerService {
         } catch (Throwable $e) {
             return 25;
         }
+    }
+
+    private function normalizeRole(?string $role): string {
+        $role = strtoupper(trim((string)$role));
+        return array_key_exists($role, self::ROLE_TARGET_MINUTES) ? $role : 'ROTATION';
+    }
+
+    private function roleExpectationDelta(string $role, int $minutesPlayed): int {
+        $target = self::ROLE_TARGET_MINUTES[$role] ?? self::ROLE_TARGET_MINUTES['ROTATION'];
+        $gap = $minutesPlayed - $target;
+        if ($gap <= -50) return -4;
+        if ($gap <= -30) return -3;
+        if ($gap <= -15) return -2;
+        if ($gap >= 35) return 1;
+        return 0;
+    }
+
+    private function inactivityMoraleDelta(string $role, ?string $lastPlayedAt): int {
+        if (!$lastPlayedAt) {
+            return in_array($role, ['KEY_PLAYER', 'REGULAR_STARTER'], true) ? -1 : 0;
+        }
+        $days = (int)floor((time() - strtotime($lastPlayedAt)) / 86400);
+        if ($days < 0) {
+            $days = 0;
+        }
+
+        $threshold = match ($role) {
+            'KEY_PLAYER' => 3,
+            'REGULAR_STARTER' => 4,
+            'ROTATION' => 6,
+            'BENCH' => 9,
+            'PROSPECT' => 11,
+            default => 6,
+        };
+
+        if ($days <= $threshold) return 0;
+        if ($days <= $threshold + 2) return -1;
+        if ($days <= $threshold + 5) return -2;
+        return -3;
+    }
+
+    private function calculateStartLoadPressure(int $playerId): int {
+        $row = $this->db->fetchOne(
+            "SELECT COUNT(*) AS c
+             FROM player_match_ratings pmr
+             JOIN matches m ON m.id = pmr.match_id
+             WHERE pmr.player_id = ?
+               AND m.played_at IS NOT NULL
+               AND DATE(m.played_at) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)",
+            [$playerId]
+        );
+        $recentStarts = (int)($row['c'] ?? 0);
+        if ($recentStarts >= 5) return 5;
+        if ($recentStarts >= 4) return 3;
+        if ($recentStarts >= 3) return 2;
+        return 0;
     }
 
     private function ensureCareerHistoryTable(): void {

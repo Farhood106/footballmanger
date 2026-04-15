@@ -24,7 +24,9 @@ class FinanceService {
 
     public function __construct(?Database $db = null) {
         $this->db = $db ?? Database::getInstance();
-        $this->ensureFinanceTables();
+        if ($this->db->shouldRunRuntimeDdlFallback()) {
+            $this->ensureFinanceTables();
+        }
     }
 
     public function postEntry(

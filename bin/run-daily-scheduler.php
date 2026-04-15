@@ -1,7 +1,7 @@
 <?php
 // bin/run-daily-scheduler.php
 
-require_once __DIR__ . '/../config/config.php';
+$config = require __DIR__ . '/../config/config.php';
 
 spl_autoload_register(function ($class) {
     $paths = [
@@ -18,6 +18,14 @@ spl_autoload_register(function ($class) {
         }
     }
 });
+
+try {
+    (new SchemaSafetyVerifier(Database::getInstance()))->verifyOrFail();
+} catch (Throwable $e) {
+    fwrite(STDERR, "Startup schema verification failed.\n" . $e->getMessage() . "\n");
+    fwrite(STDERR, "Apply required migrations or enable temporary compatibility fallback with RUNTIME_DDL_FALLBACK=1.\n");
+    exit(1);
+}
 
 $scheduler = new DailySchedulerService();
 $result = $scheduler->runDueMatches();

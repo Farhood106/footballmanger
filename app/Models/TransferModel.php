@@ -6,7 +6,9 @@ class TransferModel extends BaseModel {
 
     public function __construct() {
         parent::__construct();
-        $this->ensureTransferMarketColumns();
+        if ($this->db->shouldRunRuntimeDdlFallback()) {
+            $this->ensureTransferMarketColumns();
+        }
     }
 
     public function getActive(): array {

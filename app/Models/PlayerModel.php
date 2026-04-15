@@ -3,6 +3,7 @@
 
 class PlayerModel extends BaseModel {
     protected string $table = 'players';
+    private const SQUAD_ROLES = ['KEY_PLAYER', 'REGULAR_STARTER', 'ROTATION', 'BENCH', 'PROSPECT'];
 
     private array $positionWeights = [
         'GK'  => ['pace'=>5, 'shooting'=>2, 'passing'=>10, 'dribbling'=>5, 'defending'=>30, 'physical'=>20, 'goalkeeping'=>28],
@@ -63,6 +64,29 @@ class PlayerModel extends BaseModel {
         $allowed = ['form', 'fatigue', 'morale', 'fitness', 'morale_score', 'is_injured', 'injury_days'];
         $update = array_intersect_key($data, array_flip($allowed));
         return $this->update($playerId, $update);
+    }
+
+    public function getSquadRoleLabels(): array {
+        return [
+            'KEY_PLAYER' => 'Key Player',
+            'REGULAR_STARTER' => 'Regular Starter',
+            'ROTATION' => 'Rotation',
+            'BENCH' => 'Bench',
+            'PROSPECT' => 'Prospect',
+        ];
+    }
+
+    public function setSquadRoleForClub(int $playerId, int $clubId, string $role): bool {
+        $normalized = strtoupper(trim($role));
+        if (!in_array($normalized, self::SQUAD_ROLES, true)) {
+            return false;
+        }
+
+        $affected = $this->db->execute(
+            "UPDATE players SET squad_role = ? WHERE id = ? AND club_id = ?",
+            [$normalized, $playerId, $clubId]
+        );
+        return $affected > 0;
     }
 
     public function recoverFatigue(int $clubId, int $amount = 10): void {

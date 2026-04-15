@@ -108,4 +108,18 @@ class Database {
     public function inTransaction(): bool {
         return $this->pdo->inTransaction();
     }
+
+    /**
+     * Runtime DDL fallback switch.
+     * Default is disabled to enforce migration-first behavior.
+     * Enable temporarily with env: RUNTIME_DDL_FALLBACK=1
+     */
+    public function shouldRunRuntimeDdlFallback(): bool {
+        $raw = getenv('RUNTIME_DDL_FALLBACK');
+        if ($raw === false) {
+            return false;
+        }
+        $value = strtolower(trim((string)$raw));
+        return in_array($value, ['1', 'true', 'yes', 'on'], true);
+    }
 }

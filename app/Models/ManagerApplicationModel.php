@@ -8,7 +8,9 @@ class ManagerApplicationModel extends BaseModel {
 
     public function __construct() {
         parent::__construct();
-        $this->ensureTables();
+        if ($this->db->shouldRunRuntimeDdlFallback()) {
+            $this->ensureTables();
+        }
     }
 
     public function ensureTables(): void {

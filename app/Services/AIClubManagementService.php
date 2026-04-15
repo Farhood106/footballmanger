@@ -6,7 +6,9 @@ class AIClubManagementService {
 
     public function __construct(?Database $db = null) {
         $this->db = $db ?? Database::getInstance();
-        $this->ensureControlRuntimeTable();
+        if ($this->db->shouldRunRuntimeDdlFallback()) {
+            $this->ensureControlRuntimeTable();
+        }
     }
 
     public static function determineControlState(array $club): array {
@@ -164,10 +166,10 @@ class AIClubManagementService {
 
     private function buildAiLineup(int $clubId): array {
         $players = $this->db->fetchAll(
-            "SELECT id, position, overall
+            "SELECT id, position, overall, fitness, fatigue, last_minutes_played, last_played_at
              FROM players
              WHERE club_id = ? AND is_retired = 0 AND is_injured = 0
-             ORDER BY overall DESC, id ASC",
+             ORDER BY overall DESC, fitness DESC, id ASC",
             [$clubId]
         );
 
@@ -211,24 +213,41 @@ class AIClubManagementService {
             default => ['CM', 'CDM', 'CAM'],
         };
 
-        foreach ($preferred as $pos) {
-            foreach ($players as $p) {
-                $pid = (int)$p['id'];
-                if (isset($used[$pid])) continue;
-                if (($p['position'] ?? '') === $pos) {
-                    return $p;
-                }
-            }
-        }
-
+        $best = null;
+        $bestScore = -INF;
         foreach ($players as $p) {
             $pid = (int)$p['id'];
-            if (!isset($used[$pid])) {
-                return $p;
+            if (isset($used[$pid])) continue;
+
+            $position = (string)($p['position'] ?? '');
+            $posRank = array_search($position, $preferred, true);
+            $posBonus = $posRank === false ? -8.0 : (3.0 - min(3.0, (float)$posRank));
+
+            $fitness = (int)($p['fitness'] ?? 100);
+            $fatigue = (int)($p['fatigue'] ?? max(0, 100 - $fitness));
+            $heavyMinutesPenalty = ((int)($p['last_minutes_played'] ?? 0) >= 85) ? 3.5 : 0.0;
+            $recentPlayedPenalty = 0.0;
+            if (!empty($p['last_played_at'])) {
+                $daysSince = (int)floor((time() - strtotime((string)$p['last_played_at'])) / 86400);
+                if ($daysSince <= 2) {
+                    $recentPlayedPenalty = 1.5;
+                }
+            }
+
+            $score = ((float)($p['overall'] ?? 50) * 1.0)
+                + ($fitness * 0.15)
+                - ($fatigue * 0.12)
+                + $posBonus
+                - $heavyMinutesPenalty
+                - $recentPlayedPenalty;
+
+            if ($score > $bestScore) {
+                $bestScore = $score;
+                $best = $p;
             }
         }
 
-        return null;
+        return $best;
     }
 
     private function syncClubVacancyState(int $clubId): bool {

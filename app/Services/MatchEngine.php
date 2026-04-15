@@ -563,6 +563,7 @@ class MatchEngine {
         $starters = array_merge(array_slice($homeSquad, 0, 11), array_slice($awaySquad, 0, 11));
         $benches = array_merge(array_slice($homeSquad, 11, 7), array_slice($awaySquad, 11, 7));
         $allPlayers = array_merge($starters, $benches);
+        $playedAt = date('Y-m-d H:i:s');
         $seasonId = (int)($match['season_id'] ?? $this->getCurrentSeasonId());
         $ratingByPlayer = [];
         foreach ($ratings as $r) {
@@ -589,7 +590,7 @@ class MatchEngine {
                 $this->db->query("UPDATE players SET is_injured = 1, injury_days = ? WHERE id = ?", [$details['severity'], $playerId]);
             }
 
-            $this->playerCareer->applyPostMatchPlayerUpdate($player, $rating, $started, $minutesPlayed, $injury !== false);
+            $this->playerCareer->applyPostMatchPlayerUpdate($player, $rating, $started, $minutesPlayed, $injury !== false, $playedAt);
 
             // آپدیت آمار فصل + تاریخچه حرفه‌ای
             $this->updateSeasonStats($playerId, $seasonId, $rating, $minutesPlayed, $started);

@@ -4,7 +4,7 @@
 session_start();
 
 // Load configuration
-require_once __DIR__ . '/../config/config.php';
+$config = require __DIR__ . '/../config/config.php';
 
 // Autoload classes
 spl_autoload_register(function ($class) {
@@ -22,6 +22,18 @@ spl_autoload_register(function ($class) {
         }
     }
 });
+
+// Startup schema verification (migration-first safety)
+try {
+    (new SchemaSafetyVerifier(Database::getInstance()))->verifyOrFail();
+} catch (Throwable $e) {
+    http_response_code(503);
+    header('Content-Type: text/plain; charset=utf-8');
+    echo "Startup schema verification failed.\n";
+    echo $e->getMessage() . "\n";
+    echo "Apply required migrations or enable temporary compatibility fallback with RUNTIME_DDL_FALLBACK=1.\n";
+    exit;
+}
 
 // Initialize router
 $router = new Router();
@@ -47,6 +59,7 @@ $router->post('/club/facilities/downgrade', 'ClubFacilitiesController@downgrade'
 $router->get('/squad', 'SquadController@index');
 $router->get('/squad/tactics', 'SquadController@tactics');
 $router->post('/squad/tactics/save', 'SquadController@saveTactic');
+$router->post('/squad/role/save', 'SquadController@saveSquadRole');
 $router->get('/squad/player/{id}', 'SquadController@playerDetail');
 
 // Matches

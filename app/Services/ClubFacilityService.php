@@ -43,7 +43,9 @@ class ClubFacilityService {
     public function __construct(?Database $db = null) {
         $this->db = $db ?? Database::getInstance();
         $this->finance = new FinanceService($this->db);
-        $this->ensureFacilityTable();
+        if ($this->db->shouldRunRuntimeDdlFallback()) {
+            $this->ensureFacilityTable();
+        }
     }
 
     public function getFacilitiesForClub(int $clubId): array {

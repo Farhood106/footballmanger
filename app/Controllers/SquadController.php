@@ -21,11 +21,35 @@ class SquadController extends Controller {
         $club = $this->clubModel->find($this->getClubId());
         $squad = $this->clubModel->getSquad($club['id']);
         $injured = $this->playerModel->getInjured($club['id']);
+        $roleLabels = $this->playerModel->getSquadRoleLabels();
+
+        $squad = array_map(function (array $player) use ($roleLabels): array {
+            $fullName = trim((string)($player['full_name'] ?? (($player['first_name'] ?? '') . ' ' . ($player['last_name'] ?? ''))));
+            $role = strtoupper((string)($player['squad_role'] ?? 'ROTATION'));
+            $minutes = (int)($player['last_minutes_played'] ?? 0);
+            $lastPlayedAt = $player['last_played_at'] ?? null;
+            $daysSince = null;
+            if (!empty($lastPlayedAt)) {
+                $daysSince = max(0, (int)floor((time() - strtotime((string)$lastPlayedAt)) / 86400));
+            }
+
+            $inactivityWarning = $daysSince !== null && $daysSince >= 7;
+            $overusedWarning = $minutes >= 85;
+            return array_merge($player, [
+                'display_name' => $fullName !== '' ? $fullName : ('Player #' . (int)$player['id']),
+                'role_label' => $roleLabels[$role] ?? $roleLabels['ROTATION'],
+                'recent_minutes' => $minutes,
+                'days_since_played' => $daysSince,
+                'inactivity_warning' => $inactivityWarning,
+                'overused_warning' => $overusedWarning,
+            ]);
+        }, $squad);
 
         $this->view('squad/index', [
             'club' => $club,
             'squad' => $squad,
-            'injured' => $injured
+            'injured' => $injured,
+            'role_labels' => $roleLabels,
         ]);
     }
 
@@ -87,8 +111,34 @@ class SquadController extends Controller {
         $this->view('squad/player-detail', [
             'player' => $player,
             'season_stats' => $seasonStats,
-            'career_stats' => $careerStats
+            'career_stats' => $careerStats,
+            'role_labels' => $this->playerModel->getSquadRoleLabels(),
         ]);
+    }
+
+    public function saveSquadRole(): void {
+        if (!Auth::check()) {
+            $this->json(['error' => 'Unauthorized'], 401);
+        }
+
+        $clubId = $this->getClubId();
+        $playerId = (int)($_POST['player_id'] ?? 0);
+        $role = (string)($_POST['squad_role'] ?? '');
+        if ($playerId <= 0 || $role === '') {
+            $this->json(['error' => 'Invalid request'], 400);
+        }
+
+        $ok = $this->playerModel->setSquadRoleForClub($playerId, $clubId, $role);
+        if (!$ok) {
+            if ($this->wantsJson()) {
+                $this->json(['error' => 'Could not update squad role'], 422);
+            }
+            $this->redirect('/squad');
+        }
+        if ($this->wantsJson()) {
+            $this->json(['ok' => true, 'message' => 'Squad role updated']);
+        }
+        $this->redirect('/squad');
     }
 
     private function getClubId(): int {
@@ -99,5 +149,11 @@ class SquadController extends Controller {
     private function getCurrentSeasonId(): int {
         $season = (new SeasonModel())->getActive();
         return $season['id'] ?? 0;
+    }
+
+    private function wantsJson(): bool {
+        $accept = (string)($_SERVER['HTTP_ACCEPT'] ?? '');
+        $requestedWith = strtolower((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? ''));
+        return str_contains($accept, 'application/json') || $requestedWith === 'xmlhttprequest';
     }
 }
