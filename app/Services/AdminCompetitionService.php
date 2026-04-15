@@ -235,7 +235,6 @@ class AdminCompetitionService {
 
         $inserted = 0;
         $history = new WorldHistoryService($this->db);
-        $youthIntake = new YouthIntakeService($this->db);
         foreach (($preview['qualified'] ?? []) as $club) {
             $dup = $this->db->fetchOne(
                 "SELECT id FROM club_seasons WHERE season_id = ? AND club_id = ?",
@@ -658,6 +657,7 @@ class AdminCompetitionService {
         $competition = $this->db->fetchOne("SELECT * FROM competitions WHERE id = ?", [(int)$season['competition_id']]);
         $finance = new FinanceService($this->db);
         $history = new WorldHistoryService($this->db);
+        $youthIntake = new YouthIntakeService($this->db);
 
         $this->db->beginTransaction();
         try {

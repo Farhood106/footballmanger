@@ -52,14 +52,26 @@ class YouthIntakeService {
             $createdIds[] = $playerId;
         }
 
-        $this->db->insert('youth_intake_logs', [
-            'club_id' => $clubId,
-            'intake_season_id' => $intakeSeasonId,
-            'intake_key' => $intakeKey,
-            'academy_level' => $academyLevel,
-            'generated_count' => count($createdIds),
-            'generated_player_ids_json' => json_encode($createdIds, JSON_UNESCAPED_UNICODE),
-        ]);
+        try {
+            $this->db->insert('youth_intake_logs', [
+                'club_id' => $clubId,
+                'intake_season_id' => $intakeSeasonId,
+                'intake_key' => $intakeKey,
+                'academy_level' => $academyLevel,
+                'generated_count' => count($createdIds),
+                'generated_player_ids_json' => json_encode($createdIds, JSON_UNESCAPED_UNICODE),
+            ]);
+        } catch (Throwable $e) {
+            $duplicate = $this->db->fetchOne(
+                "SELECT id FROM youth_intake_logs
+                 WHERE club_id = ? AND intake_season_id = ? AND intake_key = ?",
+                [$clubId, $intakeSeasonId, $intakeKey]
+            );
+            if ($duplicate) {
+                return ['ok' => true, 'duplicate' => true, 'generated_count' => 0];
+            }
+            throw $e;
+        }
 
         return ['ok' => true, 'generated_count' => count($createdIds), 'player_ids' => $createdIds];
     }
@@ -141,6 +153,7 @@ class YouthIntakeService {
     }
 
     private function ensureYouthIntakeStructures(): void {
+        $this->ensureAcademyOriginColumns();
         $this->db->execute(
             "CREATE TABLE IF NOT EXISTS youth_intake_logs (
                 id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -155,5 +168,31 @@ class YouthIntakeService {
                 INDEX idx_intake_club_created (club_id, created_at)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
         );
+    }
+
+    private function ensureAcademyOriginColumns(): void {
+        $columns = $this->db->fetchAll(
+            "SELECT COLUMN_NAME AS column_name
+             FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = 'players'"
+        );
+        $existing = [];
+        foreach ($columns as $row) {
+            $existing[(string)($row['column_name'] ?? '')] = true;
+        }
+
+        if (empty($existing['is_academy_origin'])) {
+            $this->db->execute("ALTER TABLE players ADD COLUMN is_academy_origin BOOLEAN DEFAULT 0 AFTER is_retired");
+        }
+        if (empty($existing['academy_origin_club_id'])) {
+            $this->db->execute("ALTER TABLE players ADD COLUMN academy_origin_club_id INT NULL AFTER is_academy_origin");
+        }
+        if (empty($existing['academy_intake_season_id'])) {
+            $this->db->execute("ALTER TABLE players ADD COLUMN academy_intake_season_id INT NULL AFTER academy_origin_club_id");
+        }
+        if (empty($existing['academy_intake_batch_key'])) {
+            $this->db->execute("ALTER TABLE players ADD COLUMN academy_intake_batch_key VARCHAR(64) NULL AFTER academy_intake_season_id");
+        }
     }
 }
