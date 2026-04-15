@@ -30,6 +30,19 @@
 </div>
 
 <div class="card">
+    <h3>Recurring Economy Snapshot (Last <?= (int)($recurring_summary['window_days'] ?? 30) ?> days)</h3>
+    <table class="table">
+        <tr><th>Category</th><th>Total Amount</th></tr>
+        <tr><td>Coach Salaries</td><td><?= number_format((int)($recurring_summary['coach_salary'] ?? 0)) ?></td></tr>
+        <tr><td>Player Wages</td><td><?= number_format((int)($recurring_summary['player_wage'] ?? 0)) ?></td></tr>
+        <tr><td>Recurring Sponsor Income</td><td><?= number_format((int)($recurring_summary['sponsor_income'] ?? 0)) ?></td></tr>
+        <tr><td>Operating Costs</td><td><?= number_format((int)($recurring_summary['operating_cost'] ?? 0)) ?></td></tr>
+        <tr><td>Facility Maintenance</td><td><?= number_format((int)($recurring_summary['facility_maintenance'] ?? 0)) ?></td></tr>
+        <tr><td><strong>Tracked Entries</strong></td><td><strong><?= (int)($recurring_summary['entries_count'] ?? 0) ?></strong></td></tr>
+    </table>
+</div>
+
+<div class="card">
     <h3>Sponsors</h3>
     <form method="post" action="/finance/sponsors/add" style="margin-bottom:8px;">
         <input type="hidden" name="club_id" value="<?= (int)$selected_club_id ?>">
@@ -44,19 +57,26 @@
             </div>
             <div class="form-group"><input name="contact_link" placeholder="Contact link"></div>
             <div class="form-group"><input name="banner_url" placeholder="Banner/image URL"></div>
+            <div class="form-group"><input type="number" name="recurring_amount" min="0" value="0" placeholder="Recurring payout"></div>
+            <div class="form-group"><input type="number" name="recurring_cycle_days" min="1" value="7" placeholder="Cycle days"></div>
         </div>
         <div class="form-group"><input name="description" placeholder="Short description"></div>
         <button class="btn" type="submit">Add Sponsor</button>
     </form>
 
     <table class="table">
-        <thead><tr><th>Brand</th><th>Tier</th><th>Status</th><th>Details</th><th>Manage</th><th>Income</th></tr></thead>
+        <thead><tr><th>Brand</th><th>Tier</th><th>Status</th><th>Recurring</th><th>Details</th><th>Manage</th><th>Income</th></tr></thead>
         <tbody>
         <?php foreach (($sponsors ?? []) as $s): ?>
             <tr>
                 <td><?= htmlspecialchars((string)$s['brand_name']) ?></td>
                 <td><?= htmlspecialchars((string)$s['tier']) ?></td>
                 <td><?= !empty($s['is_active']) ? 'Active' : 'Inactive' ?></td>
+                <td>
+                    <?= number_format((int)($s['recurring_amount'] ?? 0)) ?>
+                    / every <?= (int)($s['recurring_cycle_days'] ?? 7) ?>d
+                    <br><small>Last: <?= htmlspecialchars((string)($s['last_paid_at'] ?? '-')) ?></small>
+                </td>
                 <td><?= htmlspecialchars((string)($s['description'] ?? '-')) ?></td>
                 <td>
                     <form method="post" action="/finance/sponsors/update" style="margin-bottom:8px;">
@@ -70,6 +90,8 @@
                         </select>
                         <input name="contact_link" value="<?= htmlspecialchars((string)($s['contact_link'] ?? '')) ?>" placeholder="Contact link">
                         <input name="banner_url" value="<?= htmlspecialchars((string)($s['banner_url'] ?? '')) ?>" placeholder="Banner URL">
+                        <input type="number" min="0" name="recurring_amount" value="<?= (int)($s['recurring_amount'] ?? 0) ?>" placeholder="Recurring payout">
+                        <input type="number" min="1" name="recurring_cycle_days" value="<?= (int)($s['recurring_cycle_days'] ?? 7) ?>" placeholder="Cycle days">
                         <input name="description" value="<?= htmlspecialchars((string)($s['description'] ?? '')) ?>" placeholder="Short description">
                         <label><input type="checkbox" name="is_active" value="1" <?= !empty($s['is_active']) ? 'checked' : '' ?>> Active</label>
                         <button class="btn" type="submit">Save</button>
@@ -91,7 +113,7 @@
                 </td>
             </tr>
         <?php endforeach; ?>
-        <?php if (empty($sponsors)): ?><tr><td colspan="6">No sponsors yet.</td></tr><?php endif; ?>
+        <?php if (empty($sponsors)): ?><tr><td colspan="7">No sponsors yet.</td></tr><?php endif; ?>
         </tbody>
     </table>
 </div>

@@ -655,6 +655,7 @@ class AdminCompetitionService {
         $competition = $this->db->fetchOne("SELECT * FROM competitions WHERE id = ?", [(int)$season['competition_id']]);
         $finance = new FinanceService($this->db);
         $history = new WorldHistoryService($this->db);
+        $youthAcademy = new YouthAcademyService($this->db);
 
         $this->db->beginTransaction();
         try {
@@ -696,13 +697,15 @@ class AdminCompetitionService {
                 }
             }
 
+            $youthIntake = $youthAcademy->generateAnnualIntakeForSeason($seasonId);
+
             $this->db->execute(
                 "UPDATE season_rollover_logs SET status = 'APPLIED', applied_at = NOW() WHERE season_id = ?",
                 [$seasonId]
             );
 
             $this->db->commit();
-            return ['ok' => true, 'plan' => $plan];
+            return ['ok' => true, 'plan' => $plan, 'youth_intake' => $youthIntake];
         } catch (Throwable $e) {
             $this->db->rollBack();
             return ['ok' => false, 'error' => $e->getMessage()];

@@ -6,6 +6,7 @@ class FinanceService {
 
     private const ALLOWED_ENTRY_TYPES = [
         'COACH_SALARY',
+        'PLAYER_WAGE',
         'MATCH_REWARD',
         'SEASON_REWARD',
         'GOVERNANCE_PENALTY',
@@ -14,6 +15,7 @@ class FinanceService {
         'TRANSFER_OUT',
         'OWNER_FUNDING',
         'SPONSOR_INCOME',
+        'OPERATING_COST',
         'MANUAL_ADMIN_ADJUSTMENT',
         'FACILITY_UPGRADE',
         'FACILITY_DOWNGRADE_REFUND',
@@ -120,6 +122,170 @@ class FinanceService {
         return ['ok' => true, 'posted' => $posted];
     }
 
+    public function postPlayerWagesForCycle(string $cycleDate): array {
+        $players = $this->db->fetchAll(
+            "SELECT id, club_id, overall, wage, contract_end
+             FROM players
+             WHERE club_id IS NOT NULL
+               AND is_retired = 0
+               AND (contract_end IS NULL OR contract_end >= ?)
+             ORDER BY club_id ASC, id ASC",
+            [$cycleDate]
+        );
+
+        $posted = 0;
+        $duplicates = 0;
+        $insufficient = 0;
+        foreach ($players as $player) {
+            $clubId = (int)($player['club_id'] ?? 0);
+            $playerId = (int)$player['id'];
+            if ($clubId <= 0 || $playerId <= 0) continue;
+
+            $wage = (int)($player['wage'] ?? 0);
+            if ($wage <= 0) {
+                $wage = $this->estimatePlayerWage((int)($player['overall'] ?? 50));
+            }
+            if ($wage <= 0) continue;
+
+            if (!$this->canClubAffordExpense($clubId, $wage)) {
+                $insufficient++;
+                continue;
+            }
+
+            $cycleRef = abs(crc32($playerId . ':' . $clubId . ':' . $cycleDate));
+            $result = $this->postEntry(
+                $clubId,
+                'PLAYER_WAGE',
+                -1 * $wage,
+                'Player wage posted for cycle ' . $cycleDate,
+                null,
+                'PLAYER_WAGE_CYCLE',
+                $cycleRef,
+                ['cycle_date' => $cycleDate, 'player_id' => $playerId, 'wage' => $wage]
+            );
+            if (!empty($result['ok'])) {
+                $posted++;
+            } elseif (($result['error'] ?? '') === 'Duplicate finance posting blocked.') {
+                $duplicates++;
+            }
+        }
+
+        return ['ok' => true, 'posted' => $posted, 'duplicates' => $duplicates, 'insufficient_balance' => $insufficient];
+    }
+
+    public function postRecurringSponsorPayoutsForCycle(string $cycleDate): array {
+        $sponsors = $this->db->fetchAll(
+            "SELECT id, club_id, tier, brand_name, is_active, recurring_amount, recurring_cycle_days, last_paid_at
+             FROM club_sponsors
+             WHERE is_active = 1
+             ORDER BY club_id ASC, id ASC"
+        );
+
+        $posted = 0;
+        $duplicates = 0;
+        foreach ($sponsors as $sponsor) {
+            $clubId = (int)$sponsor['club_id'];
+            $sponsorId = (int)$sponsor['id'];
+            if ($clubId <= 0 || $sponsorId <= 0) continue;
+
+            $cycleDays = max(1, (int)($sponsor['recurring_cycle_days'] ?? 7));
+            $lastPaidAt = !empty($sponsor['last_paid_at']) ? (string)$sponsor['last_paid_at'] : null;
+            if ($lastPaidAt !== null) {
+                $daysSinceLast = (int)floor((strtotime($cycleDate . ' 00:00:00') - strtotime(substr($lastPaidAt, 0, 10) . ' 00:00:00')) / 86400);
+                if ($daysSinceLast < $cycleDays) {
+                    continue;
+                }
+            }
+
+            $amount = (int)($sponsor['recurring_amount'] ?? 0);
+            if ($amount <= 0) {
+                $amount = $this->defaultSponsorRecurringAmount((string)($sponsor['tier'] ?? 'minor'));
+            }
+            if ($amount <= 0) continue;
+
+            $referenceId = abs(crc32('REC_SPN:' . $clubId . ':' . $sponsorId . ':' . $cycleDate));
+            $result = $this->postEntry(
+                $clubId,
+                'SPONSOR_INCOME',
+                $amount,
+                'Recurring sponsor payout: ' . (string)($sponsor['brand_name'] ?? 'sponsor'),
+                null,
+                'SPONSOR_RECURRING_CYCLE',
+                $referenceId,
+                ['cycle_date' => $cycleDate, 'sponsor_id' => $sponsorId, 'tier' => $sponsor['tier'] ?? 'minor', 'recurring' => true]
+            );
+            if (!empty($result['ok'])) {
+                $this->db->execute("UPDATE club_sponsors SET last_paid_at = ? WHERE id = ?", [$cycleDate . ' 00:00:00', $sponsorId]);
+                $posted++;
+            } elseif (($result['error'] ?? '') === 'Duplicate finance posting blocked.') {
+                $duplicates++;
+            }
+        }
+
+        return ['ok' => true, 'posted' => $posted, 'duplicates' => $duplicates];
+    }
+
+    public function postOperatingCostsForCycle(string $cycleDate): array {
+        $clubs = $this->db->fetchAll(
+            "SELECT c.id, c.reputation,
+                    COALESCE(p.players_count, 0) AS players_count,
+                    COALESCE(f.stadium_level, 1) AS stadium_level,
+                    COALESCE(f.hq_level, 1) AS hq_level
+             FROM clubs c
+             LEFT JOIN (
+                SELECT club_id, COUNT(*) AS players_count
+                FROM players
+                WHERE is_retired = 0
+                GROUP BY club_id
+             ) p ON p.club_id = c.id
+             LEFT JOIN (
+                SELECT club_id,
+                       MAX(CASE WHEN facility_type = 'stadium' THEN level ELSE 1 END) AS stadium_level,
+                       MAX(CASE WHEN facility_type = 'headquarters' THEN level ELSE 1 END) AS hq_level
+                FROM club_facilities
+                GROUP BY club_id
+             ) f ON f.club_id = c.id
+             ORDER BY c.id ASC"
+        );
+
+        $posted = 0;
+        $duplicates = 0;
+        $insufficient = 0;
+        foreach ($clubs as $club) {
+            $clubId = (int)$club['id'];
+            $cost = $this->calculateOperatingCost(
+                (int)($club['reputation'] ?? 0),
+                (int)($club['players_count'] ?? 0),
+                (int)($club['stadium_level'] ?? 1),
+                (int)($club['hq_level'] ?? 1)
+            );
+            if ($clubId <= 0 || $cost <= 0) continue;
+            if (!$this->canClubAffordExpense($clubId, $cost)) {
+                $insufficient++;
+                continue;
+            }
+
+            $referenceId = abs(crc32('OPERATING:' . $clubId . ':' . $cycleDate));
+            $result = $this->postEntry(
+                $clubId,
+                'OPERATING_COST',
+                -1 * $cost,
+                'Recurring club operating cost for cycle ' . $cycleDate,
+                null,
+                'OPERATING_COST_DAILY',
+                $referenceId,
+                ['cycle_date' => $cycleDate, 'players_count' => (int)$club['players_count']]
+            );
+            if (!empty($result['ok'])) {
+                $posted++;
+            } elseif (($result['error'] ?? '') === 'Duplicate finance posting blocked.') {
+                $duplicates++;
+            }
+        }
+
+        return ['ok' => true, 'posted' => $posted, 'duplicates' => $duplicates, 'insufficient_balance' => $insufficient];
+    }
+
     public function postOwnerFunding(int $clubId, int $ownerUserId, int $amount, string $note = '', ?string $externalRef = null): array {
         if ($amount <= 0) {
             return ['ok' => false, 'error' => 'Funding amount must be positive.'];
@@ -201,6 +367,39 @@ class FinanceService {
         );
     }
 
+    public function getRecurringEconomySnapshot(int $clubId, int $days = 30): array {
+        $rows = $this->db->fetchAll(
+            "SELECT entry_type, SUM(amount) AS total_amount, COUNT(*) AS cnt
+             FROM club_finance_ledger
+             WHERE club_id = ?
+               AND created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+               AND entry_type IN ('COACH_SALARY','PLAYER_WAGE','SPONSOR_INCOME','OPERATING_COST','FACILITY_MAINTENANCE')
+             GROUP BY entry_type",
+            [$clubId, max(1, $days)]
+        );
+
+        $summary = [
+            'window_days' => max(1, $days),
+            'coach_salary' => 0,
+            'player_wage' => 0,
+            'sponsor_income' => 0,
+            'operating_cost' => 0,
+            'facility_maintenance' => 0,
+            'entries_count' => 0,
+        ];
+        foreach ($rows as $row) {
+            $type = (string)$row['entry_type'];
+            $amount = (int)($row['total_amount'] ?? 0);
+            $summary['entries_count'] += (int)($row['cnt'] ?? 0);
+            if ($type === 'COACH_SALARY') $summary['coach_salary'] = $amount;
+            if ($type === 'PLAYER_WAGE') $summary['player_wage'] = $amount;
+            if ($type === 'SPONSOR_INCOME') $summary['sponsor_income'] = $amount;
+            if ($type === 'OPERATING_COST') $summary['operating_cost'] = $amount;
+            if ($type === 'FACILITY_MAINTENANCE') $summary['facility_maintenance'] = $amount;
+        }
+        return $summary;
+    }
+
     private function ensureFinanceTables(): void {
         $this->db->execute(
             "CREATE TABLE IF NOT EXISTS club_sponsors (
@@ -246,10 +445,62 @@ class FinanceService {
             "ALTER TABLE club_finance_ledger
              MODIFY COLUMN entry_type ENUM(
                 'COACH_SALARY','MATCH_REWARD','SEASON_REWARD','GOVERNANCE_PENALTY','GOVERNANCE_COMPENSATION',
-                'TRANSFER_IN','TRANSFER_OUT','OWNER_FUNDING','SPONSOR_INCOME','MANUAL_ADMIN_ADJUSTMENT',
+                'TRANSFER_IN','TRANSFER_OUT','OWNER_FUNDING','SPONSOR_INCOME','PLAYER_WAGE','OPERATING_COST','MANUAL_ADMIN_ADJUSTMENT',
                 'FACILITY_UPGRADE','FACILITY_DOWNGRADE_REFUND','FACILITY_MAINTENANCE',
                 'WAGE','STAFF_WAGE','PENALTY','PRIZE','OTHER','SPONSOR','TICKET'
              ) NOT NULL"
         );
+
+        $hasRecurringAmount = $this->db->fetchOne(
+            "SELECT COLUMN_NAME FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'club_sponsors' AND COLUMN_NAME = 'recurring_amount'"
+        );
+        if (!$hasRecurringAmount) {
+            $this->db->execute("ALTER TABLE club_sponsors ADD COLUMN recurring_amount BIGINT DEFAULT 0 AFTER banner_url");
+        }
+
+        $hasRecurringCycle = $this->db->fetchOne(
+            "SELECT COLUMN_NAME FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'club_sponsors' AND COLUMN_NAME = 'recurring_cycle_days'"
+        );
+        if (!$hasRecurringCycle) {
+            $this->db->execute("ALTER TABLE club_sponsors ADD COLUMN recurring_cycle_days INT DEFAULT 7 AFTER recurring_amount");
+        }
+
+        $hasLastPaid = $this->db->fetchOne(
+            "SELECT COLUMN_NAME FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'club_sponsors' AND COLUMN_NAME = 'last_paid_at'"
+        );
+        if (!$hasLastPaid) {
+            $this->db->execute("ALTER TABLE club_sponsors ADD COLUMN last_paid_at DATETIME NULL AFTER recurring_cycle_days");
+        }
+    }
+
+    private function canClubAffordExpense(int $clubId, int $expenseAmount): bool {
+        if ($expenseAmount <= 0) return true;
+        $club = $this->db->fetchOne("SELECT balance FROM clubs WHERE id = ?", [$clubId]);
+        $balance = (int)($club['balance'] ?? 0);
+        return $balance >= $expenseAmount;
+    }
+
+    private function estimatePlayerWage(int $overall): int {
+        return (int)max(1000, round(800 + (($overall * $overall) * 2.5)));
+    }
+
+    private function defaultSponsorRecurringAmount(string $tier): int {
+        return match (strtolower(trim($tier))) {
+            'main' => 130000,
+            'secondary' => 70000,
+            default => 30000,
+        };
+    }
+
+    private function calculateOperatingCost(int $reputation, int $playersCount, int $stadiumLevel, int $hqLevel): int {
+        $base = 18000;
+        $repComponent = max(0, $reputation) * 110;
+        $squadComponent = max(0, $playersCount) * 170;
+        $stadiumComponent = max(1, $stadiumLevel) * 2400;
+        $hqComponent = max(1, $hqLevel) * 2100;
+        return (int)round($base + $repComponent + $squadComponent + $stadiumComponent + $hqComponent);
     }
 }

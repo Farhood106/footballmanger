@@ -137,6 +137,9 @@ CREATE TABLE players (
     wage INT DEFAULT 0,
     contract_end DATE,
     market_value BIGINT DEFAULT 0,
+    academy_origin_club_id INT NULL,
+    youth_intake_season_id INT NULL,
+    is_academy_product BOOLEAN DEFAULT 0,
     is_transfer_listed BOOLEAN DEFAULT 0,
     asking_price BIGINT DEFAULT NULL,
     transfer_listed_at DATETIME NULL,
@@ -152,9 +155,13 @@ CREATE TABLE players (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE SET NULL,
+    FOREIGN KEY (academy_origin_club_id) REFERENCES clubs(id) ON DELETE SET NULL,
     INDEX idx_club (club_id),
     INDEX idx_position (position),
-    INDEX idx_overall (overall)
+    INDEX idx_overall (overall),
+    INDEX idx_players_academy_origin (academy_origin_club_id),
+    INDEX idx_players_youth_intake_season (youth_intake_season_id),
+    INDEX idx_players_academy_product (club_id, is_academy_product)
 ) ENGINE=InnoDB;
 
 -- Abilities
@@ -587,7 +594,7 @@ CREATE TABLE IF NOT EXISTS club_finance_ledger (
     id INT AUTO_INCREMENT PRIMARY KEY,
     club_id INT NOT NULL,
     season_id INT,
-    entry_type ENUM('COACH_SALARY','MATCH_REWARD','SEASON_REWARD','GOVERNANCE_PENALTY','GOVERNANCE_COMPENSATION','TRANSFER_IN','TRANSFER_OUT','OWNER_FUNDING','SPONSOR_INCOME','MANUAL_ADMIN_ADJUSTMENT','FACILITY_UPGRADE','FACILITY_DOWNGRADE_REFUND','FACILITY_MAINTENANCE','WAGE','STAFF_WAGE','SPONSOR','TICKET','PRIZE','PENALTY','OTHER') NOT NULL,
+    entry_type ENUM('COACH_SALARY','PLAYER_WAGE','MATCH_REWARD','SEASON_REWARD','GOVERNANCE_PENALTY','GOVERNANCE_COMPENSATION','TRANSFER_IN','TRANSFER_OUT','OWNER_FUNDING','SPONSOR_INCOME','OPERATING_COST','MANUAL_ADMIN_ADJUSTMENT','FACILITY_UPGRADE','FACILITY_DOWNGRADE_REFUND','FACILITY_MAINTENANCE','WAGE','STAFF_WAGE','SPONSOR','TICKET','PRIZE','PENALTY','OTHER') NOT NULL,
     amount BIGINT NOT NULL,
     description VARCHAR(500),
     reference_type VARCHAR(50),
@@ -610,6 +617,9 @@ CREATE TABLE IF NOT EXISTS club_sponsors (
     description TEXT,
     contact_link VARCHAR(500),
     banner_url VARCHAR(500),
+    recurring_amount BIGINT DEFAULT 0,
+    recurring_cycle_days INT DEFAULT 7,
+    last_paid_at DATETIME NULL,
     is_active BOOLEAN DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
@@ -686,4 +696,21 @@ CREATE TABLE IF NOT EXISTS club_control_runtime_states (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
     INDEX idx_runtime_vacancy (owner_vacant, manager_vacant, caretaker_active)
+) ENGINE=InnoDB;
+
+
+-- Youth intake logs to keep deterministic annual academy generation auditable
+CREATE TABLE IF NOT EXISTS youth_intakes (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    season_id INT NOT NULL,
+    club_id INT NOT NULL,
+    academy_level INT NOT NULL DEFAULT 1,
+    intake_count INT NOT NULL DEFAULT 0,
+    intake_json JSON NULL,
+    generated_at DATETIME NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_youth_intake_season_club (season_id, club_id),
+    INDEX idx_youth_intake_club_season (club_id, season_id),
+    FOREIGN KEY (season_id) REFERENCES seasons(id) ON DELETE CASCADE,
+    FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;

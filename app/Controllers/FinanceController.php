@@ -21,6 +21,7 @@ class FinanceController extends Controller {
 
         $selectedClubId = (int)($_GET['club_id'] ?? ($clubs[0]['id'] ?? 0));
         $ledger = $selectedClubId > 0 ? $this->finance->getLedgerByClub($selectedClubId) : [];
+        $recurringSummary = $selectedClubId > 0 ? $this->finance->getRecurringEconomySnapshot($selectedClubId, 30) : [];
         $sponsors = $selectedClubId > 0
             ? $this->db->fetchAll("SELECT * FROM club_sponsors WHERE club_id = ? ORDER BY is_active DESC, id DESC", [$selectedClubId])
             : [];
@@ -29,6 +30,7 @@ class FinanceController extends Controller {
             'clubs' => $clubs,
             'selected_club_id' => $selectedClubId,
             'ledger' => $ledger,
+            'recurring_summary' => $recurringSummary,
             'sponsors' => $sponsors,
             'success' => !empty($_GET['success']) ? $_GET['success'] : null,
             'error' => !empty($_GET['error']) ? $_GET['error'] : null,
@@ -66,6 +68,8 @@ class FinanceController extends Controller {
             'description' => trim((string)($_POST['description'] ?? '')),
             'contact_link' => $this->sanitizeUrl((string)($_POST['contact_link'] ?? '')),
             'banner_url' => $this->sanitizeUrl((string)($_POST['banner_url'] ?? '')),
+            'recurring_amount' => max(0, (int)($_POST['recurring_amount'] ?? 0)),
+            'recurring_cycle_days' => max(1, (int)($_POST['recurring_cycle_days'] ?? 7)),
             'is_active' => 1,
         ]);
 
@@ -92,6 +96,7 @@ class FinanceController extends Controller {
         $this->db->execute(
             "UPDATE club_sponsors
              SET tier = ?, brand_name = ?, description = ?, contact_link = ?, banner_url = ?, is_active = ?
+                 , recurring_amount = ?, recurring_cycle_days = ?
              WHERE id = ?",
             [
                 $this->sanitizeTier((string)($_POST['tier'] ?? 'minor')),
@@ -100,6 +105,8 @@ class FinanceController extends Controller {
                 $this->sanitizeUrl((string)($_POST['contact_link'] ?? '')),
                 $this->sanitizeUrl((string)($_POST['banner_url'] ?? '')),
                 !empty($_POST['is_active']) ? 1 : 0,
+                max(0, (int)($_POST['recurring_amount'] ?? 0)),
+                max(1, (int)($_POST['recurring_cycle_days'] ?? 7)),
                 $sponsorId
             ]
         );

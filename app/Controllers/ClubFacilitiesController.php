@@ -4,11 +4,13 @@
 class ClubFacilitiesController extends Controller {
     private Database $db;
     private ClubFacilityService $facilities;
+    private YouthAcademyService $youthAcademy;
 
     public function __construct() {
         parent::__construct();
         $this->db = Database::getInstance();
         $this->facilities = new ClubFacilityService($this->db);
+        $this->youthAcademy = new YouthAcademyService($this->db);
     }
 
     public function index(): void {
@@ -24,12 +26,16 @@ class ClubFacilitiesController extends Controller {
             : null;
 
         $facilityRows = $selectedClubId > 0 ? $this->facilities->getFacilitiesForClub($selectedClubId) : [];
+        $latestIntakes = $selectedClubId > 0 ? $this->youthAcademy->getLatestIntakesForClub($selectedClubId, 5) : [];
+        $academyPlayers = $selectedClubId > 0 ? $this->youthAcademy->getAcademyPlayersForClub($selectedClubId, 20) : [];
 
         $this->view('club/facilities', [
             'clubs' => $clubs,
             'selected_club_id' => $selectedClubId,
             'selected_club' => $selectedClub,
             'facilities' => $facilityRows,
+            'latest_intakes' => $latestIntakes,
+            'academy_players' => $academyPlayers,
             'success' => !empty($_GET['success']) ? $_GET['success'] : null,
             'error' => !empty($_GET['error']) ? $_GET['error'] : null,
         ]);
