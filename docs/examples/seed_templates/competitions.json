@@ -1,0 +1,24 @@
+[
+  {
+    "external_key": "IRN_PREMIER",
+    "name": "Iran Premier League",
+    "type": "LEAGUE",
+    "country": "Iran",
+    "level": 1,
+    "teams_count": 18,
+    "promotion_slots": 0,
+    "relegation_slots": 2,
+    "parent_external_key": null
+  },
+  {
+    "external_key": "IRN_DIV2",
+    "name": "Iran Division 2",
+    "type": "LEAGUE",
+    "country": "Iran",
+    "level": 2,
+    "teams_count": 18,
+    "promotion_slots": 2,
+    "relegation_slots": 0,
+    "parent_external_key": "IRN_PREMIER"
+  }
+]
