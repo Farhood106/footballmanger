@@ -18,6 +18,11 @@ class Database {
                 PDO::ATTR_EMULATE_PREPARES   => false,
                 PDO::ATTR_STRINGIFY_FETCHES  => false,
             ]);
+
+            $charset = isset($db['charset']) ? strtolower(trim((string)$db['charset'])) : 'utf8mb4';
+            if ($charset === 'utf8mb4') {
+                $this->pdo->exec("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci");
+            }
         } catch (PDOException $e) {
             error_log('[DB Connection Error] ' . $e->getMessage());
             throw new RuntimeException('خطا در اتصال به پایگاه داده.');
