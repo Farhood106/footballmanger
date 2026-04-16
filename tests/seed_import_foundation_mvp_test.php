@@ -4,6 +4,7 @@ $entrypoint = file_get_contents(__DIR__ . '/../database/import_seed_set.php');
 $importer = file_get_contents(__DIR__ . '/../database/seeds/StructuredSeedImporter.php');
 $schema = file_get_contents(__DIR__ . '/../database/schema.sql');
 $migration = file_get_contents(__DIR__ . '/../database/migrations/20260415_seed_import_foundation_mvp.sql');
+$clubMigration = file_get_contents(__DIR__ . '/../database/migrations/20260416_seed_import_club_external_key_fix.sql');
 $schemaVerifier = file_get_contents(__DIR__ . '/../app/Core/SchemaSafetyVerifier.php');
 $doc = file_get_contents(__DIR__ . '/../docs/SEED_IMPORT_FOUNDATION_MVP.md');
 
@@ -28,11 +29,17 @@ $needles = [
     [$importer, 'unknown competition_external_key'],
     [$importer, 'unknown club_external_key'],
     [$importer, 'supportsPlayerExternalKey'],
+    [$importer, 'supportsClubExternalKey'],
+    [$importer, "clubs.short_name too long"],
 
     [$schema, 'external_key VARCHAR(100) NULL'],
+    [$schema, 'UNIQUE KEY uniq_club_external_key (external_key)'],
     [$schema, 'UNIQUE KEY uniq_player_external_key (external_key)'],
     [$migration, 'ADD COLUMN external_key VARCHAR(100) NULL'],
     [$migration, 'ADD UNIQUE KEY uniq_player_external_key (external_key)'],
+    [$clubMigration, 'ADD COLUMN external_key VARCHAR(64) NULL'],
+    [$clubMigration, 'ADD UNIQUE KEY uniq_club_external_key (external_key)'],
+    [$schemaVerifier, "'clubs' => ['external_key', 'short_name']"],
     [$schemaVerifier, "'external_key'"],
 
     [$doc, 'Staged order'],

@@ -34,6 +34,7 @@ CREATE TABLE clubs (
     user_id INT UNIQUE,
     owner_user_id INT UNIQUE,
     manager_user_id INT UNIQUE,
+    external_key VARCHAR(64) NULL,
     name VARCHAR(255) UNIQUE NOT NULL,
     short_name VARCHAR(10) NOT NULL,
     country VARCHAR(100) NOT NULL,
@@ -49,6 +50,7 @@ CREATE TABLE clubs (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
     FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE SET NULL,
     FOREIGN KEY (manager_user_id) REFERENCES users(id) ON DELETE SET NULL,
+    UNIQUE KEY uniq_club_external_key (external_key),
     INDEX idx_user (user_id),
     INDEX idx_owner (owner_user_id),
     INDEX idx_manager (manager_user_id)

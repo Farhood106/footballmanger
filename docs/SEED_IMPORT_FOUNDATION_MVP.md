@@ -29,7 +29,7 @@ This order ensures parent dependencies are present before child rows are process
 
 ### External key strategy
 - `competitions.external_key` maps to `competitions.code` (unique).
-- `clubs.external_key` maps to `clubs.short_name`.
+- `clubs.external_key` maps to `clubs.external_key` (unique). `clubs.short_name` remains the short display code.
 - `players.external_key` maps to new `players.external_key` column (migration included).
 
 Fallback:

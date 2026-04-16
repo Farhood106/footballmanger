@@ -5,6 +5,7 @@ class StructuredSeedImporter
     private PDO $db;
     private bool $dryRun;
     private bool $supportsPlayerExternalKey;
+    private bool $supportsClubExternalKey;
     private int $simulatedIdCursor = -1;
     private array $competitionCodeToId = [];
     private array $clubCodeToId = [];
@@ -14,6 +15,7 @@ class StructuredSeedImporter
         $this->db = $db;
         $this->dryRun = $dryRun;
         $this->supportsPlayerExternalKey = $this->detectPlayerExternalKeySupport();
+        $this->supportsClubExternalKey = $this->detectClubExternalKeySupport();
     }
 
     public function importFromDirectory(string $directory): array
@@ -24,6 +26,7 @@ class StructuredSeedImporter
             'dry_run' => $this->dryRun,
             'source_dir' => $base,
             'supports_player_external_key' => $this->supportsPlayerExternalKey,
+            'supports_club_external_key' => $this->supportsClubExternalKey,
             'stages' => [],
             'errors' => [],
             'warnings' => [],
@@ -168,7 +171,7 @@ class StructuredSeedImporter
 
             $payload = [
                 'name' => trim((string)$row['name']),
-                'short_name' => $externalKey,
+                'short_name' => strtoupper(trim((string)($row['short_name'] ?? $externalKey))),
                 'country' => trim((string)$row['country']),
                 'city' => trim((string)$row['city']),
                 'founded' => (int)$row['founded'],
@@ -177,6 +180,9 @@ class StructuredSeedImporter
                 'stadium_name' => trim((string)$row['stadium_name']),
                 'stadium_capacity' => (int)$row['stadium_capacity'],
             ];
+            if ($this->supportsClubExternalKey) {
+                $payload['external_key'] = $externalKey;
+            }
 
             $existingId = (int)($this->clubCodeToId[$externalKey] ?? 0);
             if (!$existingId) {
@@ -315,6 +321,13 @@ class StructuredSeedImporter
                 }
                 $seen[$key] = true;
             }
+
+            $shortName = strtoupper(trim((string)($row['short_name'] ?? '')));
+            if ($shortName === '') {
+                $errors[] = "Missing required field {$prefix}.short_name";
+            } elseif (strlen($shortName) > 10) {
+                $errors[] = "clubs.short_name too long for {$key}; max 10 chars, got " . strlen($shortName);
+            }
         }
         return $errors;
     }
@@ -390,6 +403,16 @@ class StructuredSeedImporter
         return $row !== null;
     }
 
+    private function detectClubExternalKeySupport(): bool
+    {
+        $row = $this->fetchOne(
+            "SELECT COLUMN_NAME
+             FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'clubs' AND COLUMN_NAME = 'external_key'"
+        );
+        return $row !== null;
+    }
+
     private function fetchOne(string $sql, array $params = []): ?array
     {
         $stmt = $this->db->prepare($sql);
@@ -439,10 +462,13 @@ class StructuredSeedImporter
         }
 
         $this->clubCodeToId = [];
-        foreach ($this->db->query("SELECT id, short_name FROM clubs WHERE short_name IS NOT NULL") as $existing) {
-            $short = trim((string)($existing['short_name'] ?? ''));
-            if ($short !== '') {
-                $this->clubCodeToId[$short] = (int)$existing['id'];
+        $sql = $this->supportsClubExternalKey
+            ? "SELECT id, external_key AS resolver_key, short_name FROM clubs WHERE external_key IS NOT NULL"
+            : "SELECT id, short_name AS resolver_key, short_name FROM clubs WHERE short_name IS NOT NULL";
+        foreach ($this->db->query($sql) as $existing) {
+            $resolver = trim((string)($existing['resolver_key'] ?? ''));
+            if ($resolver !== '') {
+                $this->clubCodeToId[$resolver] = (int)$existing['id'];
             }
         }
     }
