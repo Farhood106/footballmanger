@@ -111,6 +111,7 @@ CREATE TABLE club_manager_applications (
 -- Players
 CREATE TABLE players (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    external_key VARCHAR(100) NULL,
     club_id INT,
     first_name VARCHAR(100) NOT NULL,
     last_name VARCHAR(100) NOT NULL,
@@ -161,6 +162,7 @@ CREATE TABLE players (
     FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE SET NULL,
     FOREIGN KEY (academy_origin_club_id) REFERENCES clubs(id) ON DELETE SET NULL,
     FOREIGN KEY (academy_intake_season_id) REFERENCES seasons(id) ON DELETE SET NULL,
+    UNIQUE KEY uniq_player_external_key (external_key),
     INDEX idx_club (club_id),
     INDEX idx_position (position),
     INDEX idx_overall (overall)
