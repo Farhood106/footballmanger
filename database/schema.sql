@@ -161,7 +161,6 @@ CREATE TABLE players (
 
     FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE SET NULL,
     FOREIGN KEY (academy_origin_club_id) REFERENCES clubs(id) ON DELETE SET NULL,
-    FOREIGN KEY (academy_intake_season_id) REFERENCES seasons(id) ON DELETE SET NULL,
     UNIQUE KEY uniq_player_external_key (external_key),
     INDEX idx_club (club_id),
     INDEX idx_position (position),
@@ -179,8 +178,7 @@ CREATE TABLE IF NOT EXISTS youth_intake_logs (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uniq_club_season_intake (club_id, intake_season_id, intake_key),
     INDEX idx_intake_club_created (club_id, created_at),
-    FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
-    FOREIGN KEY (intake_season_id) REFERENCES seasons(id) ON DELETE CASCADE
+    FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 -- Abilities
@@ -237,6 +235,14 @@ CREATE TABLE seasons (
     current_week INT DEFAULT 0,
     FOREIGN KEY (competition_id) REFERENCES competitions(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
+
+ALTER TABLE players
+    ADD CONSTRAINT fk_players_academy_intake_season
+    FOREIGN KEY (academy_intake_season_id) REFERENCES seasons(id) ON DELETE SET NULL;
+
+ALTER TABLE youth_intake_logs
+    ADD CONSTRAINT fk_youth_intake_logs_intake_season
+    FOREIGN KEY (intake_season_id) REFERENCES seasons(id) ON DELETE CASCADE;
 
 -- Club Seasons
 CREATE TABLE club_seasons (
@@ -592,8 +598,7 @@ CREATE TABLE IF NOT EXISTS manager_contract_terminations (
     FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
     FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE SET NULL,
     FOREIGN KEY (coach_user_id) REFERENCES users(id) ON DELETE SET NULL,
-    FOREIGN KEY (terminated_by_user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (governance_case_id) REFERENCES club_governance_cases(id) ON DELETE SET NULL
+    FOREIGN KEY (terminated_by_user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 -- Governance: owner/coach dispute case
@@ -619,6 +624,10 @@ CREATE TABLE IF NOT EXISTS club_governance_cases (
     FOREIGN KEY (against_user_id) REFERENCES users(id) ON DELETE SET NULL,
     INDEX idx_governance_status (club_id, status)
 ) ENGINE=InnoDB;
+
+ALTER TABLE manager_contract_terminations
+    ADD CONSTRAINT fk_manager_contract_terminations_governance_case
+    FOREIGN KEY (governance_case_id) REFERENCES club_governance_cases(id) ON DELETE SET NULL;
 
 CREATE TABLE IF NOT EXISTS club_governance_decisions (
     id INT AUTO_INCREMENT PRIMARY KEY,
