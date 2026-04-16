@@ -121,6 +121,8 @@ $router->post('/governance/review/{id}/resolve', 'GovernanceController@resolve')
 
 // Admin
 $router->get('/admin', 'AdminController@index');
+$router->get('/admin/seed', 'AdminController@seedImportPage');
+$router->post('/admin/seed/import', 'AdminController@importSeed');
 $router->get('/admin/clubs/create', 'AdminController@createClubForm');
 $router->post('/admin/clubs/create', 'AdminController@storeClub');
 $router->get('/admin/players/create', 'AdminController@createPlayerForm');
