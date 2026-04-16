@@ -58,4 +58,6 @@ The importer emits JSON output containing:
 ```bash
 php database/import_seed_set.php --path=docs/examples/seed_templates --dry-run=1
 php database/import_seed_set.php --path=docs/examples/seed_templates
+php database/import_seed_set.php --path=database/seed_sets/mini_v1 --dry-run=1
+php database/import_seed_set.php --path=database/seed_sets/mini_v1
 ```

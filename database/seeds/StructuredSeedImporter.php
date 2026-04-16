@@ -246,6 +246,10 @@ class StructuredSeedImporter
                 'wage' => (int)$row['wage'],
                 'contract_end' => trim((string)$row['contract_end']),
                 'market_value' => (int)$row['market_value'],
+                'is_transfer_listed' => isset($row['is_transfer_listed']) ? (int)$row['is_transfer_listed'] : 0,
+                'asking_price' => isset($row['asking_price']) ? (int)$row['asking_price'] : null,
+                'last_minutes_played' => isset($row['last_minutes_played']) ? (int)$row['last_minutes_played'] : 0,
+                'last_played_at' => !empty($row['last_played_at']) ? trim((string)$row['last_played_at']) : null,
             ];
             if ($this->supportsPlayerExternalKey) {
                 $payload['external_key'] = $externalKey;
@@ -339,6 +343,11 @@ class StructuredSeedImporter
                     $errors[] = "Duplicate players external_key: {$key}";
                 }
                 $seen[$key] = true;
+            }
+
+            $listed = (int)($row['is_transfer_listed'] ?? 0);
+            if ($listed === 1 && empty($row['asking_price'])) {
+                $errors[] = "Player {$key} is transfer-listed but asking_price is missing";
             }
         }
         return $errors;
