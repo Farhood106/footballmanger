@@ -5,6 +5,9 @@ class StructuredSeedImporter
     private PDO $db;
     private bool $dryRun;
     private bool $supportsPlayerExternalKey;
+    private int $simulatedIdCursor = -1;
+    private array $competitionCodeToId = [];
+    private array $clubCodeToId = [];
 
     public function __construct(PDO $db, bool $dryRun = false)
     {
@@ -50,6 +53,7 @@ class StructuredSeedImporter
 
         $inTx = false;
         try {
+            $this->hydrateIdentityMaps();
             if (!$this->dryRun) {
                 $this->db->beginTransaction();
                 $inTx = true;
@@ -86,53 +90,62 @@ class StructuredSeedImporter
     {
         $stage = ['inserted' => 0, 'updated' => 0, 'skipped' => 0, 'invalid' => 0, 'warnings' => []];
 
-        $codeToId = [];
-        foreach ($this->db->query("SELECT id, code FROM competitions WHERE code IS NOT NULL") as $existing) {
-            $code = trim((string)($existing['code'] ?? ''));
-            if ($code !== '') {
-                $codeToId[$code] = (int)$existing['id'];
-            }
-        }
+        $pending = array_values($rows);
+        $pass = 0;
+        while (!empty($pending)) {
+            $pass++;
+            $next = [];
+            $resolvedThisPass = 0;
 
-        foreach ($rows as $row) {
-            $code = trim((string)$row['external_key']);
-            $parentKey = trim((string)($row['parent_external_key'] ?? ''));
-            $parentId = null;
-            if ($parentKey !== '') {
-                $parentId = $codeToId[$parentKey] ?? null;
-                if ($parentId === null) {
-                    $stage['invalid']++;
-                    $stage['warnings'][] = "Competition {$code} references unknown parent_external_key {$parentKey}";
+            foreach ($pending as $row) {
+                $code = trim((string)$row['external_key']);
+                $parentKey = trim((string)($row['parent_external_key'] ?? ''));
+                if ($parentKey !== '' && !isset($this->competitionCodeToId[$parentKey])) {
+                    $next[] = $row;
                     continue;
                 }
-            }
 
-            $payload = [
-                'parent_competition_id' => $parentId,
-                'code' => $code,
-                'name' => trim((string)$row['name']),
-                'type' => strtoupper(trim((string)$row['type'])),
-                'country' => trim((string)$row['country']),
-                'level' => (int)$row['level'],
-                'teams_count' => (int)$row['teams_count'],
-                'promotion_slots' => isset($row['promotion_slots']) ? (int)$row['promotion_slots'] : 0,
-                'relegation_slots' => isset($row['relegation_slots']) ? (int)$row['relegation_slots'] : 0,
-            ];
+                $payload = [
+                    'parent_competition_id' => $parentKey !== '' ? (int)$this->competitionCodeToId[$parentKey] : null,
+                    'code' => $code,
+                    'name' => trim((string)$row['name']),
+                    'type' => strtoupper(trim((string)$row['type'])),
+                    'country' => trim((string)$row['country']),
+                    'level' => (int)$row['level'],
+                    'teams_count' => (int)$row['teams_count'],
+                    'promotion_slots' => isset($row['promotion_slots']) ? (int)$row['promotion_slots'] : 0,
+                    'relegation_slots' => isset($row['relegation_slots']) ? (int)$row['relegation_slots'] : 0,
+                ];
 
-            $existingId = $codeToId[$code] ?? null;
-            if ($existingId) {
-                $stage[$this->dryRun ? 'skipped' : 'updated']++;
-                if (!$this->dryRun) {
-                    $this->updateById('competitions', (int)$existingId, $payload);
+                $existingId = (int)($this->competitionCodeToId[$code] ?? 0);
+                if ($existingId > 0) {
+                    $stage['updated']++;
+                    if (!$this->dryRun) {
+                        $this->updateById('competitions', $existingId, $payload);
+                    }
+                    $resolvedThisPass++;
+                    continue;
                 }
-                continue;
+
+                $stage['inserted']++;
+                if ($this->dryRun) {
+                    $this->competitionCodeToId[$code] = $this->nextSimulatedId();
+                } else {
+                    $this->competitionCodeToId[$code] = $this->insert('competitions', $payload);
+                }
+                $resolvedThisPass++;
             }
 
-            $stage[$this->dryRun ? 'skipped' : 'inserted']++;
-            if (!$this->dryRun) {
-                $id = $this->insert('competitions', $payload);
-                $codeToId[$code] = $id;
+            if ($resolvedThisPass === 0) {
+                foreach ($next as $row) {
+                    $code = trim((string)$row['external_key']);
+                    $parentKey = trim((string)($row['parent_external_key'] ?? ''));
+                    $stage['invalid']++;
+                    $stage['warnings'][] = "Competition {$code} references unknown parent_external_key {$parentKey} (dataset_missing_or_unresolved_stage_map)";
+                }
+                break;
             }
+            $pending = $next;
         }
 
         return $stage;
@@ -142,25 +155,13 @@ class StructuredSeedImporter
     {
         $stage = ['inserted' => 0, 'updated' => 0, 'skipped' => 0, 'invalid' => 0, 'warnings' => []];
 
-        $clubCodeToId = [];
-        foreach ($this->db->query("SELECT id, short_name FROM clubs") as $existing) {
-            $short = trim((string)($existing['short_name'] ?? ''));
-            if ($short !== '') {
-                $clubCodeToId[$short] = (int)$existing['id'];
-            }
-        }
-
         foreach ($rows as $row) {
             $externalKey = trim((string)$row['external_key']);
             $competitionCode = trim((string)($row['competition_external_key'] ?? ''));
             if ($competitionCode !== '') {
-                $existsCompetition = $this->fetchOne(
-                    "SELECT id FROM competitions WHERE code = ? LIMIT 1",
-                    [$competitionCode]
-                );
-                if (!$existsCompetition) {
+                if (!isset($this->competitionCodeToId[$competitionCode])) {
                     $stage['invalid']++;
-                    $stage['warnings'][] = "Club {$externalKey} references unknown competition_external_key {$competitionCode}";
+                    $stage['warnings'][] = "Club {$externalKey} references unknown competition_external_key {$competitionCode} (dataset_missing_or_stage_resolution_failed)";
                     continue;
                 }
             }
@@ -177,25 +178,26 @@ class StructuredSeedImporter
                 'stadium_capacity' => (int)$row['stadium_capacity'],
             ];
 
-            $existingId = $clubCodeToId[$externalKey] ?? null;
+            $existingId = (int)($this->clubCodeToId[$externalKey] ?? 0);
             if (!$existingId) {
                 $byName = $this->fetchOne("SELECT id FROM clubs WHERE name = ? LIMIT 1", [$payload['name']]);
                 $existingId = (int)($byName['id'] ?? 0);
             }
 
             if ($existingId > 0) {
-                $stage[$this->dryRun ? 'skipped' : 'updated']++;
+                $stage['updated']++;
                 if (!$this->dryRun) {
                     $this->updateById('clubs', $existingId, $payload);
                 }
-                $clubCodeToId[$externalKey] = $existingId;
+                $this->clubCodeToId[$externalKey] = $existingId;
                 continue;
             }
 
-            $stage[$this->dryRun ? 'skipped' : 'inserted']++;
-            if (!$this->dryRun) {
-                $id = $this->insert('clubs', $payload);
-                $clubCodeToId[$externalKey] = $id;
+            $stage['inserted']++;
+            if ($this->dryRun) {
+                $this->clubCodeToId[$externalKey] = $this->nextSimulatedId();
+            } else {
+                $this->clubCodeToId[$externalKey] = $this->insert('clubs', $payload);
             }
         }
 
@@ -206,21 +208,13 @@ class StructuredSeedImporter
     {
         $stage = ['inserted' => 0, 'updated' => 0, 'skipped' => 0, 'invalid' => 0, 'warnings' => []];
 
-        $clubCodeToId = [];
-        foreach ($this->db->query("SELECT id, short_name FROM clubs") as $club) {
-            $clubCode = trim((string)($club['short_name'] ?? ''));
-            if ($clubCode !== '') {
-                $clubCodeToId[$clubCode] = (int)$club['id'];
-            }
-        }
-
         foreach ($rows as $row) {
             $externalKey = trim((string)$row['external_key']);
             $clubCode = trim((string)$row['club_external_key']);
-            $clubId = $clubCodeToId[$clubCode] ?? null;
+            $clubId = $this->clubCodeToId[$clubCode] ?? null;
             if (!$clubId) {
                 $stage['invalid']++;
-                $stage['warnings'][] = "Player {$externalKey} references unknown club_external_key {$clubCode}";
+                $stage['warnings'][] = "Player {$externalKey} references unknown club_external_key {$clubCode} (dataset_missing_or_stage_resolution_failed)";
                 continue;
             }
 
@@ -271,14 +265,14 @@ class StructuredSeedImporter
             }
 
             if ($existingId > 0) {
-                $stage[$this->dryRun ? 'skipped' : 'updated']++;
+                $stage['updated']++;
                 if (!$this->dryRun) {
                     $this->updateById('players', $existingId, $payload);
                 }
                 continue;
             }
 
-            $stage[$this->dryRun ? 'skipped' : 'inserted']++;
+            $stage['inserted']++;
             if (!$this->dryRun) {
                 $this->insert('players', $payload);
             }
@@ -432,5 +426,29 @@ class StructuredSeedImporter
         $totals['updated'] += (int)($stage['updated'] ?? 0);
         $totals['skipped'] += (int)($stage['skipped'] ?? 0);
         $totals['invalid'] += (int)($stage['invalid'] ?? 0);
+    }
+
+    private function hydrateIdentityMaps(): void
+    {
+        $this->competitionCodeToId = [];
+        foreach ($this->db->query("SELECT id, code FROM competitions WHERE code IS NOT NULL") as $existing) {
+            $code = trim((string)($existing['code'] ?? ''));
+            if ($code !== '') {
+                $this->competitionCodeToId[$code] = (int)$existing['id'];
+            }
+        }
+
+        $this->clubCodeToId = [];
+        foreach ($this->db->query("SELECT id, short_name FROM clubs WHERE short_name IS NOT NULL") as $existing) {
+            $short = trim((string)($existing['short_name'] ?? ''));
+            if ($short !== '') {
+                $this->clubCodeToId[$short] = (int)$existing['id'];
+            }
+        }
+    }
+
+    private function nextSimulatedId(): int
+    {
+        return $this->simulatedIdCursor--;
     }
 }
