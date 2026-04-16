@@ -32,8 +32,8 @@ class MatchEngine {
 
         try {
             // ۱. بارگذاری داده‌ها
-            $homeSquad = $this->getSquad($match['home_club_id']);
-        $awaySquad = $this->getSquad($match['away_club_id']);
+            $homeSquad = $this->getSquad((int)$match['home_club_id'], (int)$match['id']);
+        $awaySquad = $this->getSquad((int)$match['away_club_id'], (int)$match['id']);
         $homeTactics = $this->getTactics($match['home_club_id']);
         $awayTactics = $this->getTactics($match['away_club_id']);
 
@@ -138,10 +138,35 @@ class MatchEngine {
 
     // ─── محاسبه قدرت تیم ───────────────────────────────────────────────────
 
-    private function getSquad(int $clubId): array {
+    private function getSquad(int $clubId, ?int $matchId = null): array {
+        if ($matchId !== null) {
+            $lockedCount = $this->db->fetchOne(
+                "SELECT COUNT(*) AS total FROM match_lineups WHERE match_id = ? AND club_id = ? AND is_starter = 1",
+                [$matchId, $clubId]
+            );
+            if ((int)($lockedCount['total'] ?? 0) >= 11) {
+                return $this->db->fetchAll(
+                    "SELECT p.*,
+                            GROUP_CONCAT(a.code SEPARATOR ',') as abilities,
+                            COALESCE(ml.position, p.position) AS lineup_position,
+                            COALESCE(ml.is_starter, 0) AS lineup_is_starter
+                     FROM players p
+                     LEFT JOIN match_lineups ml ON ml.player_id = p.id AND ml.match_id = ? AND ml.club_id = ?
+                     LEFT JOIN player_abilities pa ON p.id = pa.player_id AND pa.is_active = 1
+                     LEFT JOIN abilities a ON pa.ability_id = a.id
+                     WHERE p.club_id = ? AND p.is_injured = 0 AND p.is_retired = 0
+                     GROUP BY p.id, ml.position, ml.is_starter
+                     ORDER BY COALESCE(ml.is_starter, 0) DESC, p.overall DESC
+                     LIMIT 18",
+                    [$matchId, $clubId, $clubId]
+                );
+            }
+        }
+
         return $this->db->fetchAll(
             "SELECT p.*, 
-                    GROUP_CONCAT(a.code SEPARATOR ',') as abilities
+                    GROUP_CONCAT(a.code SEPARATOR ',') as abilities,
+                    p.position AS lineup_position
              FROM players p
              LEFT JOIN player_abilities pa ON p.id = pa.player_id AND pa.is_active = 1
              LEFT JOIN abilities a ON pa.ability_id = a.id
@@ -173,7 +198,7 @@ class MatchEngine {
 
         foreach ($starters as $player) {
             $effective = $this->effectiveOverall($player);
-            $pos = $player['position'];
+            $pos = (string)($player['lineup_position'] ?? $player['position']);
 
             if (in_array($pos, ['ST', 'CF', 'LW', 'RW', 'CAM'])) {
                 $attack += $effective;

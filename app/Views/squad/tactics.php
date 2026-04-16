@@ -1,22 +1,21 @@
 <?php require_once __DIR__ . '/../layout/header.php'; ?>
 
 <div class="card">
-    <h2>تاکتیک تیم</h2>
+    <h2>تاکتیک تیم و ترکیب</h2>
 
     <form method="POST" action="/squad/tactics/save" data-ajax>
+        <input type="hidden" name="phase_key" value="<?= htmlspecialchars((string)($phase_key ?? 'MATCH_1')) ?>">
         <div class="grid">
             <div class="form-group">
                 <label>فرماسیون</label>
                 <select name="formation">
-                    <?php
-                    $formations = ['4-4-2','4-3-3','4-2-3-1','3-5-2','5-3-2','4-5-1','3-4-3'];
-                    foreach ($formations as $f):
-                    ?>
-                        <option value="<?= $f ?>" <?= ($tactic['formation'] ?? '') == $f ? 'selected' : '' ?>>
-                            <?= $f ?>
+                    <?php foreach (($formations ?? []) as $key => $label): ?>
+                        <option value="<?= htmlspecialchars((string)$key) ?>" <?= (($selected_formation ?? '') === $key) ? 'selected' : '' ?>>
+                            <?= htmlspecialchars((string)$key) ?> - <?= htmlspecialchars((string)$label) ?>
                         </option>
-                    <?php endforeach; ?>
+                    <?php endforeach;?>
                 </select>
+                <small>برای تغییر فرمیشن و به‌روزرسانی اسلات‌ها، ذخیره کنید.</small>
             </div>
 
             <div class="form-group">
@@ -58,26 +57,63 @@
             </div>
         </div>
 
-        <h3 style="margin: 20px 0 10px;">ترکیب اصلی (۱۱ نفر)</h3>
+        <h3 style="margin: 20px 0 10px;">Lineup Builder (۱۱ اسلات)</h3>
 
         <table class="table">
             <tr>
-                <th>بازیکن</th>
-                <th>پست</th>
-                <th>قدرت</th>
-                <th>در ترکیب</th>
+                <th>اسلات</th>
+                <th>بازیکن انتخابی</th>
+                <th>رتبه‌ی موقعیتی</th>
+                <th>بهترین گزینه‌ها</th>
             </tr>
 
-            <?php foreach ($squad as $p): ?>
+            <?php foreach (($lineup_board ?? []) as $slot): ?>
             <tr>
-                <td><?= htmlspecialchars($p['name']) ?></td>
-                <td><?= htmlspecialchars($p['position']) ?></td>
-                <td><?= $p['overall'] ?></td>
                 <td>
-                    <input type="checkbox"
-                           name="lineup[]"
-                           value="<?= $p['id'] ?>"
-                           <?= in_array($p['id'], $lineup ?? []) ? 'checked' : '' ?>>
+                    <strong><?= htmlspecialchars((string)$slot['position_slot']) ?></strong>
+                    <div style="font-size:12px; color:#666;"><?= htmlspecialchars((string)$slot['slot_label']) ?></div>
+                </td>
+                <td>
+                    <select name="lineup[<?= htmlspecialchars((string)$slot['slot_key']) ?>]" required>
+                        <option value="">-- انتخاب بازیکن --</option>
+                        <?php foreach (($slot['candidates'] ?? []) as $candidate): ?>
+                            <?php
+                                $label = trim((string)$candidate['full_name']) !== '' ? (string)$candidate['full_name'] : ('Player #' . (int)$candidate['id']);
+                                $isSelected = (int)($slot['selected_player_id'] ?? 0) === (int)$candidate['id'];
+                                $oos = !empty($candidate['out_of_position']) ? ' (OOP)' : '';
+                            ?>
+                            <option value="<?= (int)$candidate['id'] ?>" <?= $isSelected ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($label) ?> | <?= htmlspecialchars((string)$candidate['position']) ?> | OVR <?= (int)$candidate['overall'] ?> | Rate <?= (int)$candidate['position_rating'] . $oos ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </td>
+                <td>
+                    <?php
+                        $selectedRating = null;
+                        foreach (($slot['candidates'] ?? []) as $candidate) {
+                            if ((int)$candidate['id'] === (int)($slot['selected_player_id'] ?? 0)) {
+                                $selectedRating = $candidate;
+                                break;
+                            }
+                        }
+                    ?>
+                    <?php if ($selectedRating): ?>
+                        <strong><?= (int)$selectedRating['position_rating'] ?></strong>
+                        <?php if (!empty($selectedRating['out_of_position'])): ?>
+                            <span style="color:#b91c1c; font-size:12px;">Out of Position</span>
+                        <?php endif; ?>
+                    <?php else: ?>
+                        <span style="color:#666;">انتخاب نشده</span>
+                    <?php endif; ?>
+                </td>
+                <td>
+                    <?php foreach (($slot['recommended'] ?? []) as $rec): ?>
+                        <div style="font-size:12px;">
+                            <?= htmlspecialchars((string)$rec['full_name']) ?>
+                            <span style="color:#666;">(<?= htmlspecialchars((string)$rec['position']) ?> / <?= (int)$rec['position_rating'] ?>)</span>
+                        </div>
+                    <?php endforeach; ?>
                 </td>
             </tr>
             <?php endforeach; ?>

@@ -69,12 +69,28 @@ class SquadController extends Controller {
         $activeTactic = $this->tacticModel->getActiveByClub($club['id']);
         $squad = $this->clubModel->getSquad($club['id']);
         $formations = $this->tacticModel->getValidFormations();
+        $phaseKey = (string)($_GET['phase_key'] ?? 'MATCH_1');
+        $selectedFormation = (string)($_GET['formation'] ?? ($activeTactic['formation'] ?? $this->tacticModel->getDefaultFormation()));
+        if (!isset($formations[$selectedFormation])) {
+            $selectedFormation = $this->tacticModel->getDefaultFormation();
+        }
+
+        $existingByKey = [];
+        foreach (($activeTactic['lineups'][$phaseKey] ?? []) as $row) {
+            $slotKey = ((string)($row['position_slot'] ?? 'CM')) . '__' . max(1, (int)($row['slot_order'] ?? 1));
+            $existingByKey[$slotKey] = (int)($row['player_id'] ?? 0);
+        }
+        $formationSlots = $this->tacticModel->getFormationSlots($selectedFormation);
+        $lineupBoard = $this->tacticModel->buildLineupSelectionData($squad, $formationSlots, $existingByKey);
 
         $this->view('squad/tactics', [
             'club' => $club,
             'tactic' => $activeTactic,
             'squad' => $squad,
-            'formations' => $formations
+            'formations' => $formations,
+            'selected_formation' => $selectedFormation,
+            'phase_key' => $phaseKey,
+            'lineup_board' => $lineupBoard,
         ]);
     }
 
@@ -84,12 +100,40 @@ class SquadController extends Controller {
         }
 
         $clubId = $this->getClubId();
-        $formation = $_POST['formation'] ?? '';
+        $formation = (string)($_POST['formation'] ?? '');
         $mentality = $_POST['mentality'] ?? 'BALANCED';
-        $lineup = json_decode($_POST['lineup'] ?? '[]', true);
+        $phaseKey = (string)($_POST['phase_key'] ?? 'MATCH_1');
+        $lineupInput = $_POST['lineup'] ?? [];
+        if (!is_array($lineupInput)) {
+            $lineupInput = [];
+        }
+        $formations = $this->tacticModel->getValidFormations();
+        if (!isset($formations[$formation])) {
+            $this->json(['error' => 'فرمیشن نامعتبر است'], 400);
+        }
 
-        if (!$formation || empty($lineup)) {
-            $this->json(['error' => 'فرمیشن و ترکیب الزامی است'], 400);
+        $slots = $this->tacticModel->getFormationSlots($formation);
+        $lineupRows = [];
+        $seenPlayers = [];
+        foreach ($slots as $slot) {
+            $slotKey = (string)$slot['slot_key'];
+            $playerId = (int)($lineupInput[$slotKey] ?? 0);
+            if ($playerId <= 0) {
+                $this->json(['error' => 'برای همه اسلات‌ها بازیکن انتخاب کنید'], 400);
+            }
+            if (isset($seenPlayers[$playerId])) {
+                $this->json(['error' => 'یک بازیکن نمی‌تواند در چند اسلات همزمان قرار گیرد'], 400);
+            }
+            $seenPlayers[$playerId] = true;
+            $lineupRows[] = [
+                'position_slot' => (string)$slot['position_slot'],
+                'slot_order' => (int)$slot['slot_order'],
+                'player_id' => $playerId,
+            ];
+        }
+
+        if (count($lineupRows) < 11) {
+            $this->json(['error' => 'ترکیب باید حداقل ۱۱ بازیکن داشته باشد'], 400);
         }
 
         $this->tacticModel->saveTacticalSetup($clubId, [
@@ -97,8 +141,7 @@ class SquadController extends Controller {
             'mentality' => $mentality
         ]);
 
-        $phaseKey = $_POST['phase_key'] ?? 'MATCH_1';
-        $this->tacticModel->saveLineup($clubId, $phaseKey, $lineup);
+        $this->tacticModel->saveLineup($clubId, $phaseKey, $lineupRows);
         $this->json(['success' => true, 'message' => 'تاکتیک با موفقیت ذخیره شد']);
     }
 

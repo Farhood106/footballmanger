@@ -219,11 +219,11 @@ class DailyCycleOrchestrator {
 
         foreach ([(int)$match['home_club_id'], (int)$match['away_club_id']] as $clubId) {
             $rows = $this->db->fetchAll(
-                "SELECT tl.player_id, tl.position_slot, p.position AS actual_position
+                "SELECT tl.player_id, tl.position_slot, tl.slot_order, p.position AS actual_position
                  FROM tactic_lineups tl
                  JOIN players p ON p.id = tl.player_id
                  WHERE tl.club_id = ? AND tl.phase_key IN (?, 'MATCH_1') AND tl.is_active = 1
-                 ORDER BY CASE WHEN tl.phase_key = ? THEN 0 ELSE 1 END, tl.position_slot",
+                 ORDER BY CASE WHEN tl.phase_key = ? THEN 0 ELSE 1 END, tl.position_slot, tl.slot_order, tl.id",
                 [$clubId, $lineupPhase, $lineupPhase]
             );
 
@@ -235,11 +235,11 @@ class DailyCycleOrchestrator {
                 }
 
                 $rows = $this->db->fetchAll(
-                    "SELECT tl.player_id, tl.position_slot, p.position AS actual_position
+                    "SELECT tl.player_id, tl.position_slot, tl.slot_order, p.position AS actual_position
                      FROM tactic_lineups tl
                      JOIN players p ON p.id = tl.player_id
                      WHERE tl.club_id = ? AND tl.phase_key IN (?, 'MATCH_1') AND tl.is_active = 1
-                     ORDER BY CASE WHEN tl.phase_key = ? THEN 0 ELSE 1 END, tl.position_slot",
+                     ORDER BY CASE WHEN tl.phase_key = ? THEN 0 ELSE 1 END, tl.position_slot, tl.slot_order, tl.id",
                     [$clubId, $lineupPhase, $lineupPhase]
                 );
                 $validation = self::validateLineupRows($rows);

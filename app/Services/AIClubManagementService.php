@@ -217,6 +217,7 @@ class AIClubManagementService {
                 'phase_key' => $lineupPhase,
                 'player_id' => (int)$row['player_id'],
                 'position_slot' => $row['position_slot'],
+                'slot_order' => (int)($row['slot_order'] ?? 1),
                 'is_active' => 1,
             ]);
         }
@@ -232,11 +233,11 @@ class AIClubManagementService {
 
     private function fetchCandidateLineupRows(int $clubId, string $lineupPhase): array {
         return $this->db->fetchAll(
-            "SELECT tl.player_id, tl.position_slot, p.position AS actual_position
+            "SELECT tl.player_id, tl.position_slot, tl.slot_order, p.position AS actual_position
              FROM tactic_lineups tl
              JOIN players p ON p.id = tl.player_id
              WHERE tl.club_id = ? AND tl.phase_key IN (?, 'MATCH_1') AND tl.is_active = 1
-             ORDER BY CASE WHEN tl.phase_key = ? THEN 0 ELSE 1 END, tl.position_slot",
+             ORDER BY CASE WHEN tl.phase_key = ? THEN 0 ELSE 1 END, tl.position_slot, tl.slot_order, tl.id",
             [$clubId, $lineupPhase, $lineupPhase]
         );
     }
@@ -250,16 +251,32 @@ class AIClubManagementService {
             [$clubId]
         );
 
-        $slots = ['GK','LB','CB','CB','RB','CM','CM','CAM','LW','RW','ST'];
+        $slots = [
+            ['position_slot' => 'GK', 'slot_order' => 1],
+            ['position_slot' => 'LB', 'slot_order' => 1],
+            ['position_slot' => 'CB', 'slot_order' => 1],
+            ['position_slot' => 'CB', 'slot_order' => 2],
+            ['position_slot' => 'RB', 'slot_order' => 1],
+            ['position_slot' => 'CM', 'slot_order' => 1],
+            ['position_slot' => 'CM', 'slot_order' => 2],
+            ['position_slot' => 'CAM', 'slot_order' => 1],
+            ['position_slot' => 'LW', 'slot_order' => 1],
+            ['position_slot' => 'RW', 'slot_order' => 1],
+            ['position_slot' => 'ST', 'slot_order' => 1],
+        ];
         $selected = [];
         $used = [];
 
         foreach ($slots as $slot) {
-            $picked = $this->pickBestForSlot($players, $slot, $used);
+            $picked = $this->pickBestForSlot($players, (string)$slot['position_slot'], $used);
             if (!$picked) {
                 break;
             }
-            $selected[] = ['player_id' => (int)$picked['id'], 'position_slot' => $slot];
+            $selected[] = [
+                'player_id' => (int)$picked['id'],
+                'position_slot' => (string)$slot['position_slot'],
+                'slot_order' => (int)$slot['slot_order'],
+            ];
             $used[(int)$picked['id']] = true;
         }
 
@@ -267,7 +284,12 @@ class AIClubManagementService {
             foreach ($players as $p) {
                 $pid = (int)$p['id'];
                 if (isset($used[$pid])) continue;
-                $selected[] = ['player_id' => $pid, 'position_slot' => $slots[count($selected)] ?? 'CM'];
+                $fallback = $slots[count($selected)] ?? ['position_slot' => 'CM', 'slot_order' => 1];
+                $selected[] = [
+                    'player_id' => $pid,
+                    'position_slot' => (string)$fallback['position_slot'],
+                    'slot_order' => (int)$fallback['slot_order'],
+                ];
                 $used[$pid] = true;
                 if (count($selected) >= 11) break;
             }

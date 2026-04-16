@@ -527,12 +527,13 @@ CREATE TABLE IF NOT EXISTS tactic_lineups (
     phase_key ENUM('MATCH_1','MATCH_2','RECOVERY','NEXT_DAY') DEFAULT 'MATCH_1',
     player_id INT NOT NULL,
     position_slot ENUM('GK','LB','RB','CB','LWB','RWB','CDM','CM','CAM','LW','RW','ST','CF') NOT NULL,
+    slot_order TINYINT NOT NULL DEFAULT 1,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
     FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
-    UNIQUE KEY unique_active_lineup_slot (club_id, phase_key, position_slot, is_active),
+    UNIQUE KEY unique_active_lineup_slot_order (club_id, phase_key, position_slot, slot_order, is_active),
     INDEX idx_club_phase (club_id, phase_key)
 ) ENGINE=InnoDB;
 
