@@ -17,6 +17,8 @@ $needles = [
     [$view, 'id="formation-select"'],
     [$view, '/squad/tactics?formation='],
     [$view, 'فرمیشن فعال'],
+    [$view, "other.value = ''"],
+    [$view, '.lineup-slot-select'],
     [$footer, 'application/x-www-form-urlencoded'],
     [$footer, 'new URLSearchParams(formData).toString()'],
 ];

@@ -82,15 +82,7 @@ class SquadController extends Controller {
         }
         $formationSlots = $this->tacticModel->getFormationSlots($selectedFormation);
         $lineupBoard = $this->tacticModel->buildLineupSelectionData($squad, $formationSlots, $existingByKey);
-        $responsibilityOptions = array_map(function (array $player): array {
-            $fullName = trim((string)(($player['first_name'] ?? '') . ' ' . ($player['last_name'] ?? '')));
-            return [
-                'id' => (int)($player['id'] ?? 0),
-                'name' => $fullName !== '' ? $fullName : ('Player #' . (int)($player['id'] ?? 0)),
-                'position' => (string)($player['position'] ?? ''),
-                'overall' => (int)($player['overall'] ?? 0),
-            ];
-        }, $squad);
+        $responsibilityRankings = $this->tacticModel->buildResponsibilityRankings($squad, $lineupBoard);
 
         $this->view('squad/tactics', [
             'club' => $club,
@@ -100,7 +92,7 @@ class SquadController extends Controller {
             'selected_formation' => $selectedFormation,
             'phase_key' => $phaseKey,
             'lineup_board' => $lineupBoard,
-            'responsibility_options' => $responsibilityOptions,
+            'responsibility_rankings' => $responsibilityRankings,
         ]);
     }
 

@@ -277,6 +277,39 @@ class TacticModel extends BaseModel {
         return $output;
     }
 
+    public function buildResponsibilityRankings(array $squad, array $lineupBoard): array {
+        $lineupPlayerIds = [];
+        foreach ($lineupBoard as $slot) {
+            $pid = (int)($slot['selected_player_id'] ?? 0);
+            if ($pid > 0) {
+                $lineupPlayerIds[$pid] = true;
+            }
+        }
+
+        $roles = ['captain', 'penalty_taker', 'freekick_taker', 'corner_taker'];
+        $result = [];
+        foreach ($roles as $role) {
+            $ranked = [];
+            foreach ($squad as $player) {
+                $pid = (int)($player['id'] ?? 0);
+                if ($pid <= 0) continue;
+                $score = $this->calculateResponsibilityScore($player, $role, isset($lineupPlayerIds[$pid]));
+                $name = trim((string)(($player['first_name'] ?? '') . ' ' . ($player['last_name'] ?? '')));
+                $ranked[] = [
+                    'id' => $pid,
+                    'name' => $name !== '' ? $name : ('Player #' . $pid),
+                    'position' => (string)($player['position'] ?? ''),
+                    'overall' => (int)($player['overall'] ?? 0),
+                    'score' => $score,
+                ];
+            }
+            usort($ranked, fn($a, $b) => ($b['score'] <=> $a['score']) ?: ($b['overall'] <=> $a['overall']) ?: ($a['id'] <=> $b['id']));
+            $result[$role] = $ranked;
+        }
+
+        return $result;
+    }
+
     public function calculatePositionRating(array $player, string $slot): int {
         $slot = strtoupper($slot);
         $weights = $this->positionWeights($slot);
@@ -359,5 +392,35 @@ class TacticModel extends BaseModel {
         }
 
         return null;
+    }
+
+    private function calculateResponsibilityScore(array $player, string $role, bool $inLineup): float {
+        $overall = (int)($player['overall'] ?? 0);
+        $shooting = (int)($player['shooting'] ?? 0);
+        $passing = (int)($player['passing'] ?? 0);
+        $dribbling = (int)($player['dribbling'] ?? 0);
+        $pace = (int)($player['pace'] ?? 0);
+        $physical = (int)($player['physical'] ?? 0);
+        $morale = (float)($player['morale'] ?? 6.5);
+        $roleCode = strtoupper((string)($player['squad_role'] ?? 'ROTATION'));
+        $position = strtoupper((string)($player['position'] ?? ''));
+
+        $lineupBonus = $inLineup ? 5.0 : 0.0;
+        $stabilityBonus = match ($roleCode) {
+            'KEY_PLAYER' => 4.0,
+            'REGULAR_STARTER' => 2.0,
+            'ROTATION' => 1.0,
+            default => 0.0,
+        };
+
+        return match ($role) {
+            'captain' => ($overall * 0.45) + ($morale * 6.0) + ($physical * 0.18) + $lineupBonus + $stabilityBonus,
+            'penalty_taker' => ($shooting * 0.60) + ($overall * 0.20) + ($morale * 2.5) + ($physical * 0.10) + $lineupBonus,
+            'freekick_taker' => ($passing * 0.45) + ($shooting * 0.25) + ($dribbling * 0.15) + ($overall * 0.15) + $lineupBonus,
+            'corner_taker' => ($passing * 0.45) + ($dribbling * 0.25) + ($pace * 0.10) + ($overall * 0.20)
+                + (in_array($position, ['LM','RM','LW','RW','CAM'], true) ? 3.0 : 0.0)
+                + $lineupBonus,
+            default => (float)$overall,
+        };
     }
 }

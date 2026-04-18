@@ -17,6 +17,8 @@ $needles = [
     [$tacticModel, 'board_x'],
     [$tacticModel, 'board_y'],
     [$tacticModel, 'selected_candidate'],
+    [$tacticModel, 'buildResponsibilityRankings'],
+    [$tacticModel, 'calculateResponsibilityScore'],
     [$squadController, 'captain'],
     [$squadController, 'penalty_taker'],
     [$squadController, 'freekick_taker'],
@@ -24,6 +26,9 @@ $needles = [
     [$tacticsView, 'tactics-pitch'],
     [$tacticsView, 'بورد گرافیکی تاکتیک'],
     [$tacticsView, 'مسئولیت‌های کلیدی تیم'],
+    [$tacticsView, 'Score'],
+    [$tacticsView, '⭐'],
+    [$tacticsView, 'lineup-slot-select'],
     [$schema, "'LM','RM'"],
     [$schema, 'corner_taker INT'],
     [$schema, 'freekick_taker INT'],
@@ -38,6 +43,8 @@ $needles = [
     [$matchEngine, "'penalty_taker' => null"],
     [$matchEngine, "'freekick_taker' => null"],
     [$matchEngine, "'corner_taker' => null"],
+    [$matchEngine, 'set_piece_mod'],
+    [$matchEngine, 'buildResponsibilityImpact'],
 ];
 
 foreach ($needles as [$haystack, $needle]) {

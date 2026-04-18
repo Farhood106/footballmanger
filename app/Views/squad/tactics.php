@@ -121,7 +121,7 @@
                             <span class="slot-oop">(خارج از پست)</span>
                         <?php endif; ?>
                     </div>
-                    <select name="lineup[<?= htmlspecialchars((string)$slot['slot_key']) ?>]" required>
+                    <select class="lineup-slot-select" data-slot-key="<?= htmlspecialchars((string)$slot['slot_key']) ?>" name="lineup[<?= htmlspecialchars((string)$slot['slot_key']) ?>]" required>
                         <option value="">-- انتخاب بازیکن --</option>
                         <?php foreach (($slot['candidates'] ?? []) as $candidate): ?>
                             <?php
@@ -161,9 +161,10 @@
                     <label><?= htmlspecialchars($label) ?></label>
                     <select name="<?= htmlspecialchars($field) ?>">
                         <option value="">-- بدون انتخاب --</option>
-                        <?php foreach (($responsibility_options ?? []) as $opt): ?>
+                        <?php foreach (($responsibility_rankings[$field] ?? []) as $idx => $opt): ?>
+                            <?php $best = $idx === 0 ? '⭐ ' : ''; ?>
                             <option value="<?= (int)$opt['id'] ?>" <?= ((int)($tactic[$field] ?? 0) === (int)$opt['id']) ? 'selected' : '' ?>>
-                                <?= htmlspecialchars((string)$opt['name']) ?> | <?= htmlspecialchars((string)$opt['position']) ?> | OVR <?= (int)$opt['overall'] ?>
+                                <?= $best . htmlspecialchars((string)$opt['name']) ?> | <?= htmlspecialchars((string)$opt['position']) ?> | OVR <?= (int)$opt['overall'] ?> | Score <?= number_format((float)$opt['score'], 1) ?>
                             </option>
                         <?php endforeach; ?>
                     </select>
@@ -184,6 +185,20 @@
             const phaseKey = <?= json_encode((string)($phase_key ?? 'MATCH_1')) ?>;
             const url = `/squad/tactics?formation=${encodeURIComponent(selected)}&phase_key=${encodeURIComponent(phaseKey)}`;
             window.location.href = url;
+        });
+
+        const slotSelects = Array.from(document.querySelectorAll('.lineup-slot-select'));
+        slotSelects.forEach(select => {
+            select.addEventListener('change', function () {
+                const selectedPlayerId = this.value;
+                if (!selectedPlayerId) return;
+                slotSelects.forEach(other => {
+                    if (other === this) return;
+                    if (other.value === selectedPlayerId) {
+                        other.value = '';
+                    }
+                });
+            });
         });
     })();
 </script>
