@@ -1,7 +1,12 @@
 <?php require_once __DIR__ . '/../layout/header.php'; ?>
 
 <div class="card">
-    <h2>فهرست بازیکنان</h2>
+    <h2>اسکواد / مدیریت بازیکنان</h2>
+    <p style="margin-top:6px; color:#555;">این صفحه برای مرور اسکواد، نقش‌ها، وضعیت دقایق بازی و مصدومیت‌ها است.</p>
+    <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+        <a class="btn" href="/squad">اسکواد</a>
+        <a class="btn" href="/squad/tactics">رفتن به تاکتیک / ترکیب</a>
+    </div>
 
     <table class="table">
         <tr>

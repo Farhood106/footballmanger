@@ -1,7 +1,12 @@
 <?php require_once __DIR__ . '/../layout/header.php'; ?>
 
 <div class="card">
-    <h2>تاکتیک تیم و ترکیب</h2>
+    <h2>تاکتیک / ترکیب / فرمیشن</h2>
+    <p style="margin-top:6px; color:#555;">این صفحه برای چیدمان فرمیشن، انتخاب بازیکن برای هر اسلات و ذخیره ترکیب مسابقه است.</p>
+    <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+        <a class="btn" href="/squad">بازگشت به اسکواد / بازیکنان</a>
+        <a class="btn" href="/squad/tactics">تاکتیک / ترکیب</a>
+    </div>
 
     <form method="POST" action="/squad/tactics/save" data-ajax>
         <input type="hidden" name="phase_key" value="<?= htmlspecialchars((string)($phase_key ?? 'MATCH_1')) ?>">

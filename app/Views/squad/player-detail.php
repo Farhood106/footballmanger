@@ -111,7 +111,8 @@
     <?php endif; ?>
 
     <div style="margin-top: 20px;">
-        <a href="/squad" class="btn">بازگشت به ترکیب</a>
+        <a href="/squad" class="btn">بازگشت به اسکواد / بازیکنان</a>
+        <a href="/squad/tactics" class="btn">رفتن به تاکتیک / ترکیب</a>
     </div>
 </div>
 

@@ -57,7 +57,9 @@ $router->post('/club/facilities/downgrade', 'ClubFacilitiesController@downgrade'
 
 // Squad management
 $router->get('/squad', 'SquadController@index');
+$router->get('/squad/players', 'SquadController@index');
 $router->get('/squad/tactics', 'SquadController@tactics');
+$router->get('/squad/lineup', 'SquadController@tactics');
 $router->post('/squad/tactics/save', 'SquadController@saveTactic');
 $router->post('/squad/role/save', 'SquadController@saveSquadRole');
 $router->get('/squad/player/{id}', 'SquadController@playerDetail');
