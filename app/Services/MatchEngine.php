@@ -186,7 +186,11 @@ class MatchEngine {
             'mentality' => 'NORMAL',
             'pressing' => 5,
             'tempo' => 5,
-            'width' => 5
+            'width' => 5,
+            'captain' => null,
+            'penalty_taker' => null,
+            'freekick_taker' => null,
+            'corner_taker' => null,
         ];
     }
 

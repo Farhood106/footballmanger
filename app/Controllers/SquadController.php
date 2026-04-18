@@ -82,6 +82,15 @@ class SquadController extends Controller {
         }
         $formationSlots = $this->tacticModel->getFormationSlots($selectedFormation);
         $lineupBoard = $this->tacticModel->buildLineupSelectionData($squad, $formationSlots, $existingByKey);
+        $responsibilityOptions = array_map(function (array $player): array {
+            $fullName = trim((string)(($player['first_name'] ?? '') . ' ' . ($player['last_name'] ?? '')));
+            return [
+                'id' => (int)($player['id'] ?? 0),
+                'name' => $fullName !== '' ? $fullName : ('Player #' . (int)($player['id'] ?? 0)),
+                'position' => (string)($player['position'] ?? ''),
+                'overall' => (int)($player['overall'] ?? 0),
+            ];
+        }, $squad);
 
         $this->view('squad/tactics', [
             'club' => $club,
@@ -91,6 +100,7 @@ class SquadController extends Controller {
             'selected_formation' => $selectedFormation,
             'phase_key' => $phaseKey,
             'lineup_board' => $lineupBoard,
+            'responsibility_options' => $responsibilityOptions,
         ]);
     }
 
@@ -136,9 +146,24 @@ class SquadController extends Controller {
             $this->json(['error' => 'ترکیب باید حداقل ۱۱ بازیکن داشته باشد'], 400);
         }
 
+        $captain = (int)($_POST['captain'] ?? 0);
+        $penaltyTaker = (int)($_POST['penalty_taker'] ?? 0);
+        $freekickTaker = (int)($_POST['freekick_taker'] ?? 0);
+        $cornerTaker = (int)($_POST['corner_taker'] ?? 0);
+        $squadIds = array_flip(array_map(fn($p) => (int)($p['id'] ?? 0), $this->clubModel->getSquad($clubId)));
+        foreach ([$captain, $penaltyTaker, $freekickTaker, $cornerTaker] as $rolePlayerId) {
+            if ($rolePlayerId > 0 && !isset($squadIds[$rolePlayerId])) {
+                $this->json(['error' => 'مسئول انتخاب‌شده خارج از اسکواد باشگاه است'], 400);
+            }
+        }
+
         $this->tacticModel->saveTacticalSetup($clubId, [
             'formation' => $formation,
-            'mentality' => $mentality
+            'mentality' => $mentality,
+            'captain' => $captain > 0 ? $captain : null,
+            'penalty_taker' => $penaltyTaker > 0 ? $penaltyTaker : null,
+            'freekick_taker' => $freekickTaker > 0 ? $freekickTaker : null,
+            'corner_taker' => $cornerTaker > 0 ? $cornerTaker : null,
         ]);
 
         $this->tacticModel->saveLineup($clubId, $phaseKey, $lineupRows);

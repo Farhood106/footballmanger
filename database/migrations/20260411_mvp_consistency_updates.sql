@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS tactic_lineups (
     club_id INT NOT NULL,
     phase_key ENUM('MATCH_1','MATCH_2','RECOVERY','NEXT_DAY') DEFAULT 'MATCH_1',
     player_id INT NOT NULL,
-    position_slot ENUM('GK','LB','RB','CB','LWB','RWB','CDM','CM','CAM','LW','RW','ST','CF') NOT NULL,
+    position_slot ENUM('GK','LB','RB','CB','LWB','RWB','CDM','CM','CAM','LM','RM','LW','RW','ST','CF') NOT NULL,
     slot_order TINYINT NOT NULL DEFAULT 1,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

@@ -8,56 +8,56 @@ class TacticModel extends BaseModel {
     private const DEFAULT_FORMATION = '4-3-3';
     private const FORMATIONS = [
         '4-4-2' => [
-            ['slot_key' => 'GK__1', 'position_slot' => 'GK', 'slot_order' => 1, 'label' => 'Goalkeeper'],
-            ['slot_key' => 'LB__1', 'position_slot' => 'LB', 'slot_order' => 1, 'label' => 'Left Back'],
-            ['slot_key' => 'CB__1', 'position_slot' => 'CB', 'slot_order' => 1, 'label' => 'Center Back (L)'],
-            ['slot_key' => 'CB__2', 'position_slot' => 'CB', 'slot_order' => 2, 'label' => 'Center Back (R)'],
-            ['slot_key' => 'RB__1', 'position_slot' => 'RB', 'slot_order' => 1, 'label' => 'Right Back'],
-            ['slot_key' => 'CM__1', 'position_slot' => 'CM', 'slot_order' => 1, 'label' => 'Midfielder (L)'],
-            ['slot_key' => 'CM__2', 'position_slot' => 'CM', 'slot_order' => 2, 'label' => 'Midfielder (R)'],
-            ['slot_key' => 'LW__1', 'position_slot' => 'LW', 'slot_order' => 1, 'label' => 'Left Mid / Wing'],
-            ['slot_key' => 'RW__1', 'position_slot' => 'RW', 'slot_order' => 1, 'label' => 'Right Mid / Wing'],
-            ['slot_key' => 'ST__1', 'position_slot' => 'ST', 'slot_order' => 1, 'label' => 'Striker (L)'],
-            ['slot_key' => 'ST__2', 'position_slot' => 'ST', 'slot_order' => 2, 'label' => 'Striker (R)'],
+            ['slot_key' => 'GK__1', 'position_slot' => 'GK', 'slot_order' => 1, 'label' => 'Goalkeeper', 'board_x' => 50, 'board_y' => 90],
+            ['slot_key' => 'LB__1', 'position_slot' => 'LB', 'slot_order' => 1, 'label' => 'Left Back', 'board_x' => 20, 'board_y' => 74],
+            ['slot_key' => 'CB__1', 'position_slot' => 'CB', 'slot_order' => 1, 'label' => 'Center Back (L)', 'board_x' => 40, 'board_y' => 76],
+            ['slot_key' => 'CB__2', 'position_slot' => 'CB', 'slot_order' => 2, 'label' => 'Center Back (R)', 'board_x' => 60, 'board_y' => 76],
+            ['slot_key' => 'RB__1', 'position_slot' => 'RB', 'slot_order' => 1, 'label' => 'Right Back', 'board_x' => 80, 'board_y' => 74],
+            ['slot_key' => 'LM__1', 'position_slot' => 'LM', 'slot_order' => 1, 'label' => 'Left Midfielder', 'board_x' => 18, 'board_y' => 53],
+            ['slot_key' => 'CM__1', 'position_slot' => 'CM', 'slot_order' => 1, 'label' => 'Midfielder (L)', 'board_x' => 43, 'board_y' => 56],
+            ['slot_key' => 'CM__2', 'position_slot' => 'CM', 'slot_order' => 2, 'label' => 'Midfielder (R)', 'board_x' => 57, 'board_y' => 56],
+            ['slot_key' => 'RM__1', 'position_slot' => 'RM', 'slot_order' => 1, 'label' => 'Right Midfielder', 'board_x' => 82, 'board_y' => 53],
+            ['slot_key' => 'ST__1', 'position_slot' => 'ST', 'slot_order' => 1, 'label' => 'Striker (L)', 'board_x' => 43, 'board_y' => 30],
+            ['slot_key' => 'ST__2', 'position_slot' => 'ST', 'slot_order' => 2, 'label' => 'Striker (R)', 'board_x' => 57, 'board_y' => 30],
         ],
         '4-3-3' => [
-            ['slot_key' => 'GK__1', 'position_slot' => 'GK', 'slot_order' => 1, 'label' => 'Goalkeeper'],
-            ['slot_key' => 'LB__1', 'position_slot' => 'LB', 'slot_order' => 1, 'label' => 'Left Back'],
-            ['slot_key' => 'CB__1', 'position_slot' => 'CB', 'slot_order' => 1, 'label' => 'Center Back (L)'],
-            ['slot_key' => 'CB__2', 'position_slot' => 'CB', 'slot_order' => 2, 'label' => 'Center Back (R)'],
-            ['slot_key' => 'RB__1', 'position_slot' => 'RB', 'slot_order' => 1, 'label' => 'Right Back'],
-            ['slot_key' => 'CDM__1', 'position_slot' => 'CDM', 'slot_order' => 1, 'label' => 'Defensive Midfielder'],
-            ['slot_key' => 'CM__1', 'position_slot' => 'CM', 'slot_order' => 1, 'label' => 'Central Midfielder (L)'],
-            ['slot_key' => 'CM__2', 'position_slot' => 'CM', 'slot_order' => 2, 'label' => 'Central Midfielder (R)'],
-            ['slot_key' => 'LW__1', 'position_slot' => 'LW', 'slot_order' => 1, 'label' => 'Left Wing'],
-            ['slot_key' => 'RW__1', 'position_slot' => 'RW', 'slot_order' => 1, 'label' => 'Right Wing'],
-            ['slot_key' => 'ST__1', 'position_slot' => 'ST', 'slot_order' => 1, 'label' => 'Striker'],
+            ['slot_key' => 'GK__1', 'position_slot' => 'GK', 'slot_order' => 1, 'label' => 'Goalkeeper', 'board_x' => 50, 'board_y' => 90],
+            ['slot_key' => 'LB__1', 'position_slot' => 'LB', 'slot_order' => 1, 'label' => 'Left Back', 'board_x' => 20, 'board_y' => 74],
+            ['slot_key' => 'CB__1', 'position_slot' => 'CB', 'slot_order' => 1, 'label' => 'Center Back (L)', 'board_x' => 40, 'board_y' => 76],
+            ['slot_key' => 'CB__2', 'position_slot' => 'CB', 'slot_order' => 2, 'label' => 'Center Back (R)', 'board_x' => 60, 'board_y' => 76],
+            ['slot_key' => 'RB__1', 'position_slot' => 'RB', 'slot_order' => 1, 'label' => 'Right Back', 'board_x' => 80, 'board_y' => 74],
+            ['slot_key' => 'CDM__1', 'position_slot' => 'CDM', 'slot_order' => 1, 'label' => 'Defensive Midfielder', 'board_x' => 50, 'board_y' => 62],
+            ['slot_key' => 'CM__1', 'position_slot' => 'CM', 'slot_order' => 1, 'label' => 'Central Midfielder (L)', 'board_x' => 38, 'board_y' => 50],
+            ['slot_key' => 'CM__2', 'position_slot' => 'CM', 'slot_order' => 2, 'label' => 'Central Midfielder (R)', 'board_x' => 62, 'board_y' => 50],
+            ['slot_key' => 'LW__1', 'position_slot' => 'LW', 'slot_order' => 1, 'label' => 'Left Wing', 'board_x' => 22, 'board_y' => 32],
+            ['slot_key' => 'RW__1', 'position_slot' => 'RW', 'slot_order' => 1, 'label' => 'Right Wing', 'board_x' => 78, 'board_y' => 32],
+            ['slot_key' => 'ST__1', 'position_slot' => 'ST', 'slot_order' => 1, 'label' => 'Striker', 'board_x' => 50, 'board_y' => 24],
         ],
         '4-2-3-1' => [
-            ['slot_key' => 'GK__1', 'position_slot' => 'GK', 'slot_order' => 1, 'label' => 'Goalkeeper'],
-            ['slot_key' => 'LB__1', 'position_slot' => 'LB', 'slot_order' => 1, 'label' => 'Left Back'],
-            ['slot_key' => 'CB__1', 'position_slot' => 'CB', 'slot_order' => 1, 'label' => 'Center Back (L)'],
-            ['slot_key' => 'CB__2', 'position_slot' => 'CB', 'slot_order' => 2, 'label' => 'Center Back (R)'],
-            ['slot_key' => 'RB__1', 'position_slot' => 'RB', 'slot_order' => 1, 'label' => 'Right Back'],
-            ['slot_key' => 'CDM__1', 'position_slot' => 'CDM', 'slot_order' => 1, 'label' => 'Defensive Midfielder (L)'],
-            ['slot_key' => 'CDM__2', 'position_slot' => 'CDM', 'slot_order' => 2, 'label' => 'Defensive Midfielder (R)'],
-            ['slot_key' => 'CAM__1', 'position_slot' => 'CAM', 'slot_order' => 1, 'label' => 'Attacking Midfielder'],
-            ['slot_key' => 'LW__1', 'position_slot' => 'LW', 'slot_order' => 1, 'label' => 'Left Wing'],
-            ['slot_key' => 'RW__1', 'position_slot' => 'RW', 'slot_order' => 1, 'label' => 'Right Wing'],
-            ['slot_key' => 'ST__1', 'position_slot' => 'ST', 'slot_order' => 1, 'label' => 'Striker'],
+            ['slot_key' => 'GK__1', 'position_slot' => 'GK', 'slot_order' => 1, 'label' => 'Goalkeeper', 'board_x' => 50, 'board_y' => 90],
+            ['slot_key' => 'LB__1', 'position_slot' => 'LB', 'slot_order' => 1, 'label' => 'Left Back', 'board_x' => 20, 'board_y' => 74],
+            ['slot_key' => 'CB__1', 'position_slot' => 'CB', 'slot_order' => 1, 'label' => 'Center Back (L)', 'board_x' => 40, 'board_y' => 76],
+            ['slot_key' => 'CB__2', 'position_slot' => 'CB', 'slot_order' => 2, 'label' => 'Center Back (R)', 'board_x' => 60, 'board_y' => 76],
+            ['slot_key' => 'RB__1', 'position_slot' => 'RB', 'slot_order' => 1, 'label' => 'Right Back', 'board_x' => 80, 'board_y' => 74],
+            ['slot_key' => 'CDM__1', 'position_slot' => 'CDM', 'slot_order' => 1, 'label' => 'Defensive Midfielder (L)', 'board_x' => 42, 'board_y' => 61],
+            ['slot_key' => 'CDM__2', 'position_slot' => 'CDM', 'slot_order' => 2, 'label' => 'Defensive Midfielder (R)', 'board_x' => 58, 'board_y' => 61],
+            ['slot_key' => 'CAM__1', 'position_slot' => 'CAM', 'slot_order' => 1, 'label' => 'Attacking Midfielder', 'board_x' => 50, 'board_y' => 44],
+            ['slot_key' => 'LM__1', 'position_slot' => 'LM', 'slot_order' => 1, 'label' => 'Left Midfielder', 'board_x' => 22, 'board_y' => 42],
+            ['slot_key' => 'RM__1', 'position_slot' => 'RM', 'slot_order' => 1, 'label' => 'Right Midfielder', 'board_x' => 78, 'board_y' => 42],
+            ['slot_key' => 'ST__1', 'position_slot' => 'ST', 'slot_order' => 1, 'label' => 'Striker', 'board_x' => 50, 'board_y' => 24],
         ],
         '3-5-2' => [
-            ['slot_key' => 'GK__1', 'position_slot' => 'GK', 'slot_order' => 1, 'label' => 'Goalkeeper'],
-            ['slot_key' => 'CB__1', 'position_slot' => 'CB', 'slot_order' => 1, 'label' => 'Center Back (L)'],
-            ['slot_key' => 'CB__2', 'position_slot' => 'CB', 'slot_order' => 2, 'label' => 'Center Back (C)'],
-            ['slot_key' => 'CB__3', 'position_slot' => 'CB', 'slot_order' => 3, 'label' => 'Center Back (R)'],
-            ['slot_key' => 'LWB__1', 'position_slot' => 'LWB', 'slot_order' => 1, 'label' => 'Left Wing Back'],
-            ['slot_key' => 'RWB__1', 'position_slot' => 'RWB', 'slot_order' => 1, 'label' => 'Right Wing Back'],
-            ['slot_key' => 'CDM__1', 'position_slot' => 'CDM', 'slot_order' => 1, 'label' => 'Defensive Midfielder'],
-            ['slot_key' => 'CM__1', 'position_slot' => 'CM', 'slot_order' => 1, 'label' => 'Central Midfielder'],
-            ['slot_key' => 'CAM__1', 'position_slot' => 'CAM', 'slot_order' => 1, 'label' => 'Attacking Midfielder'],
-            ['slot_key' => 'ST__1', 'position_slot' => 'ST', 'slot_order' => 1, 'label' => 'Striker (L)'],
-            ['slot_key' => 'ST__2', 'position_slot' => 'ST', 'slot_order' => 2, 'label' => 'Striker (R)'],
+            ['slot_key' => 'GK__1', 'position_slot' => 'GK', 'slot_order' => 1, 'label' => 'Goalkeeper', 'board_x' => 50, 'board_y' => 90],
+            ['slot_key' => 'CB__1', 'position_slot' => 'CB', 'slot_order' => 1, 'label' => 'Center Back (L)', 'board_x' => 33, 'board_y' => 76],
+            ['slot_key' => 'CB__2', 'position_slot' => 'CB', 'slot_order' => 2, 'label' => 'Center Back (C)', 'board_x' => 50, 'board_y' => 76],
+            ['slot_key' => 'CB__3', 'position_slot' => 'CB', 'slot_order' => 3, 'label' => 'Center Back (R)', 'board_x' => 67, 'board_y' => 76],
+            ['slot_key' => 'LWB__1', 'position_slot' => 'LWB', 'slot_order' => 1, 'label' => 'Left Wing Back', 'board_x' => 18, 'board_y' => 57],
+            ['slot_key' => 'RWB__1', 'position_slot' => 'RWB', 'slot_order' => 1, 'label' => 'Right Wing Back', 'board_x' => 82, 'board_y' => 57],
+            ['slot_key' => 'CDM__1', 'position_slot' => 'CDM', 'slot_order' => 1, 'label' => 'Defensive Midfielder', 'board_x' => 50, 'board_y' => 60],
+            ['slot_key' => 'CM__1', 'position_slot' => 'CM', 'slot_order' => 1, 'label' => 'Central Midfielder', 'board_x' => 50, 'board_y' => 47],
+            ['slot_key' => 'CAM__1', 'position_slot' => 'CAM', 'slot_order' => 1, 'label' => 'Attacking Midfielder', 'board_x' => 50, 'board_y' => 36],
+            ['slot_key' => 'ST__1', 'position_slot' => 'ST', 'slot_order' => 1, 'label' => 'Striker (L)', 'board_x' => 43, 'board_y' => 24],
+            ['slot_key' => 'ST__2', 'position_slot' => 'ST', 'slot_order' => 2, 'label' => 'Striker (R)', 'board_x' => 57, 'board_y' => 24],
         ],
     ];
 
@@ -195,9 +195,12 @@ class TacticModel extends BaseModel {
                 'slot_label' => (string)$slot['label'],
                 'position_slot' => $positionSlot,
                 'slot_order' => (int)$slot['slot_order'],
+                'board_x' => (int)($slot['board_x'] ?? 50),
+                'board_y' => (int)($slot['board_y'] ?? 50),
                 'selected_player_id' => $selectedPlayerId,
                 'candidates' => $candidates,
                 'recommended' => array_slice($candidates, 0, 3),
+                'selected_candidate' => $this->findSelectedCandidate($candidates, $selectedPlayerId),
             ];
         }
 
@@ -241,6 +244,8 @@ class TacticModel extends BaseModel {
             'CDM' => ['CDM', 'CM', 'CB'],
             'CM' => ['CM', 'CDM', 'CAM'],
             'CAM' => ['CAM', 'CM', 'CF'],
+            'LM' => ['LM', 'LW', 'CM', 'LWB'],
+            'RM' => ['RM', 'RW', 'CM', 'RWB'],
             'LW' => ['LW', 'RW', 'CAM', 'LWB'],
             'RW' => ['RW', 'LW', 'CAM', 'RWB'],
             'ST' => ['ST', 'CF', 'CAM'],
@@ -261,6 +266,8 @@ class TacticModel extends BaseModel {
             'CDM' => ['pace' => 0.10, 'shooting' => 0.05, 'passing' => 0.25, 'dribbling' => 0.08, 'defending' => 0.37, 'physical' => 0.10, 'overall' => 0.05],
             'CM' => ['pace' => 0.10, 'shooting' => 0.10, 'passing' => 0.30, 'dribbling' => 0.15, 'defending' => 0.20, 'physical' => 0.10, 'overall' => 0.05],
             'CAM' => ['pace' => 0.10, 'shooting' => 0.18, 'passing' => 0.28, 'dribbling' => 0.24, 'defending' => 0.05, 'physical' => 0.10, 'overall' => 0.05],
+            'LM' => ['pace' => 0.20, 'shooting' => 0.12, 'passing' => 0.22, 'dribbling' => 0.18, 'defending' => 0.12, 'physical' => 0.11, 'overall' => 0.05],
+            'RM' => ['pace' => 0.20, 'shooting' => 0.12, 'passing' => 0.22, 'dribbling' => 0.18, 'defending' => 0.12, 'physical' => 0.11, 'overall' => 0.05],
             'LW' => ['pace' => 0.22, 'shooting' => 0.20, 'passing' => 0.15, 'dribbling' => 0.25, 'defending' => 0.03, 'physical' => 0.10, 'overall' => 0.05],
             'RW' => ['pace' => 0.22, 'shooting' => 0.20, 'passing' => 0.15, 'dribbling' => 0.25, 'defending' => 0.03, 'physical' => 0.10, 'overall' => 0.05],
             'ST' => ['pace' => 0.18, 'shooting' => 0.34, 'passing' => 0.12, 'dribbling' => 0.16, 'defending' => 0.00, 'physical' => 0.15, 'overall' => 0.05],
@@ -268,5 +275,19 @@ class TacticModel extends BaseModel {
         ];
 
         return $map[$slot] ?? $map['CM'];
+    }
+
+    private function findSelectedCandidate(array $candidates, int $selectedPlayerId): ?array {
+        if ($selectedPlayerId <= 0) {
+            return null;
+        }
+
+        foreach ($candidates as $candidate) {
+            if ((int)$candidate['id'] === $selectedPlayerId) {
+                return $candidate;
+            }
+        }
+
+        return null;
     }
 }
