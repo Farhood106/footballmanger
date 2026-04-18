@@ -167,7 +167,7 @@ class SquadController extends Controller {
         ]);
 
         $this->tacticModel->saveLineup($clubId, $phaseKey, $lineupRows);
-        $this->json(['success' => true, 'message' => 'تاکتیک با موفقیت ذخیره شد']);
+        $this->json(['success' => true, 'message' => 'تاکتیک با موفقیت ذخیره شد', 'reload' => true]);
     }
 
     public function playerDetail(int $playerId): void {

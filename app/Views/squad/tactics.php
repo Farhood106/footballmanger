@@ -60,6 +60,8 @@
 <div class="card">
     <h2>تاکتیک / ترکیب / فرمیشن</h2>
     <p style="margin-top:6px; color:#555;">این صفحه برای چیدمان گرافیکی فرمیشن، انتخاب بازیکن‌های هر اسلات و تعیین مسئولیت‌های کلیدی تیم است.</p>
+    <p style="margin-top:4px; color:#0f5132; font-weight:700;">فرمیشن فعال: <?= htmlspecialchars((string)($selected_formation ?? '4-3-3')) ?></p>
+    <p style="margin-top:4px; color:#555;">پوشش پست‌ها: GK, LB/RB, CB, LWB/RWB, DM(CDM), CM, AM(CAM), LM/RM, LW/RW, ST/CF</p>
     <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
         <a class="btn" href="/squad">بازگشت به اسکواد / بازیکنان</a>
         <a class="btn" href="/squad/tactics">تاکتیک / ترکیب</a>
@@ -70,7 +72,7 @@
         <div class="grid" style="margin-top:12px;">
             <div class="form-group">
                 <label>فرماسیون</label>
-                <select name="formation">
+                <select name="formation" id="formation-select">
                     <?php foreach (($formations ?? []) as $key => $label): ?>
                         <option value="<?= htmlspecialchars((string)$key) ?>" <?= (($selected_formation ?? '') === $key) ? 'selected' : '' ?>>
                             <?= htmlspecialchars((string)$key) ?> - <?= htmlspecialchars((string)$label) ?>
@@ -173,4 +175,16 @@
     </form>
 </div>
 
+<script>
+    (function () {
+        const formationSelect = document.getElementById('formation-select');
+        if (!formationSelect) return;
+        formationSelect.addEventListener('change', function () {
+            const selected = this.value || '';
+            const phaseKey = <?= json_encode((string)($phase_key ?? 'MATCH_1')) ?>;
+            const url = `/squad/tactics?formation=${encodeURIComponent(selected)}&phase_key=${encodeURIComponent(phaseKey)}`;
+            window.location.href = url;
+        });
+    })();
+</script>
 <?php require_once __DIR__ . '/../layout/footer.php'; ?>
