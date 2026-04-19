@@ -8,8 +8,10 @@ class AdminCompetitionService {
 
     public function __construct(?Database $db = null) {
         $this->db = $db ?? Database::getInstance();
-        $this->ensureRolloverTable();
-        $this->ensureQualificationSlotsTable();
+        if ($this->db->shouldRunRuntimeDdlFallback()) {
+            $this->ensureRolloverTable();
+            $this->ensureQualificationSlotsTable();
+        }
     }
 
     public function listCompetitionsWithSeasons(): array {
@@ -655,6 +657,7 @@ class AdminCompetitionService {
         $competition = $this->db->fetchOne("SELECT * FROM competitions WHERE id = ?", [(int)$season['competition_id']]);
         $finance = new FinanceService($this->db);
         $history = new WorldHistoryService($this->db);
+        $youthIntake = new YouthIntakeService($this->db);
 
         $this->db->beginTransaction();
         try {
@@ -671,6 +674,21 @@ class AdminCompetitionService {
                 $this->applyAssignmentsToSeason($lowerSeasonId, $plan['relegated'], 'relegated');
             }
 
+            $intakeTargets = [];
+            $intakeTargets[$currentNextSeasonId] = array_map(fn($r) => (int)$r['club_id'], $plan['direct'] ?? []);
+            if (!empty($upperSeasonId ?? null)) {
+                $intakeTargets[$upperSeasonId] = array_map(fn($r) => (int)$r['club_id'], $plan['promoted'] ?? []);
+            }
+            if (!empty($lowerSeasonId ?? null)) {
+                $intakeTargets[$lowerSeasonId] = array_map(fn($r) => (int)$r['club_id'], $plan['relegated'] ?? []);
+            }
+            $intakeSummary = ['generated_players' => 0, 'clubs' => 0];
+            foreach ($intakeTargets as $targetSeasonId => $clubIds) {
+                $result = $youthIntake->generateForSeason($clubIds, (int)$targetSeasonId, 'ROLLOVER_APPLY');
+                $intakeSummary['generated_players'] += (int)($result['generated_players'] ?? 0);
+                $intakeSummary['clubs'] += (int)($result['clubs'] ?? 0);
+            }
+
             if (!empty($plan['promoted'])) {
                 foreach ($plan['promoted'] as $club) {
                     $posted = $finance->postSeasonReward((int)$club['club_id'], $seasonId, 250000, 'Promotion reward', 'PROMOTION');
@@ -685,15 +703,14 @@ class AdminCompetitionService {
                     $history->addClubHonor((int)$club['club_id'], $seasonId, (int)$competition['id'], 'RELEGATION', 'Relegated during rollover.');
                 }
             }
-            if (!empty($plan['direct'])) {
-                $champion = $plan['direct'][0] ?? null;
-                if ($champion) {
-                    $posted = $finance->postSeasonReward((int)$champion['club_id'], $seasonId, 500000, 'Title reward', 'TITLE');
+            $orderedStandings = $this->getOrderedStandings($seasonId);
+            $champion = $orderedStandings[0] ?? null;
+            if ($champion) {
+                $posted = $finance->postSeasonReward((int)$champion['club_id'], $seasonId, 500000, 'Title reward', 'TITLE');
                     if (empty($posted['ok'])) {
                         throw new RuntimeException($posted['error'] ?? 'Failed to post title reward.');
                     }
-                    $history->addClubHonor((int)$champion['club_id'], $seasonId, (int)$competition['id'], 'LEAGUE_TITLE', 'Finished season in 1st place.');
-                }
+                $history->addClubHonor((int)$champion['club_id'], $seasonId, (int)$competition['id'], 'LEAGUE_TITLE', 'Finished season in 1st place.');
             }
 
             $this->db->execute(
@@ -702,7 +719,7 @@ class AdminCompetitionService {
             );
 
             $this->db->commit();
-            return ['ok' => true, 'plan' => $plan];
+            return ['ok' => true, 'plan' => $plan, 'youth_intake' => $intakeSummary];
         } catch (Throwable $e) {
             $this->db->rollBack();
             return ['ok' => false, 'error' => $e->getMessage()];

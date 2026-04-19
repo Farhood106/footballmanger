@@ -18,6 +18,11 @@ class Database {
                 PDO::ATTR_EMULATE_PREPARES   => false,
                 PDO::ATTR_STRINGIFY_FETCHES  => false,
             ]);
+
+            $charset = isset($db['charset']) ? strtolower(trim((string)$db['charset'])) : 'utf8mb4';
+            if ($charset === 'utf8mb4') {
+                $this->pdo->exec("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci");
+            }
         } catch (PDOException $e) {
             error_log('[DB Connection Error] ' . $e->getMessage());
             throw new RuntimeException('خطا در اتصال به پایگاه داده.');
@@ -107,5 +112,19 @@ class Database {
 
     public function inTransaction(): bool {
         return $this->pdo->inTransaction();
+    }
+
+    /**
+     * Runtime DDL fallback switch.
+     * Default is disabled to enforce migration-first behavior.
+     * Enable temporarily with env: RUNTIME_DDL_FALLBACK=1
+     */
+    public function shouldRunRuntimeDdlFallback(): bool {
+        $raw = getenv('RUNTIME_DDL_FALLBACK');
+        if ($raw === false) {
+            return false;
+        }
+        $value = strtolower(trim((string)$raw));
+        return in_array($value, ['1', 'true', 'yes', 'on'], true);
     }
 }

@@ -31,11 +31,11 @@ class ClubModel extends BaseModel {
 
     public function getStartingXI(int $clubId, string $phaseKey = 'MATCH_1'): array {
         return $this->db->fetchAll(
-            "SELECT p.*, CONCAT(p.first_name, ' ', p.last_name) AS full_name, tl.position_slot
+            "SELECT p.*, CONCAT(p.first_name, ' ', p.last_name) AS full_name, tl.position_slot, tl.slot_order
              FROM tactic_lineups tl
              JOIN players p ON tl.player_id = p.id
              WHERE tl.club_id = ? AND tl.phase_key = ? AND tl.is_active = 1
-             ORDER BY tl.position_slot",
+             ORDER BY tl.position_slot, tl.slot_order, tl.id",
             [$clubId, $phaseKey]
         );
     }

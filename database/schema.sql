@@ -34,6 +34,7 @@ CREATE TABLE clubs (
     user_id INT UNIQUE,
     owner_user_id INT UNIQUE,
     manager_user_id INT UNIQUE,
+    external_key VARCHAR(64) NULL,
     name VARCHAR(255) UNIQUE NOT NULL,
     short_name VARCHAR(10) NOT NULL,
     country VARCHAR(100) NOT NULL,
@@ -49,6 +50,7 @@ CREATE TABLE clubs (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
     FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE SET NULL,
     FOREIGN KEY (manager_user_id) REFERENCES users(id) ON DELETE SET NULL,
+    UNIQUE KEY uniq_club_external_key (external_key),
     INDEX idx_user (user_id),
     INDEX idx_owner (owner_user_id),
     INDEX idx_manager (manager_user_id)
@@ -111,12 +113,13 @@ CREATE TABLE club_manager_applications (
 -- Players
 CREATE TABLE players (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    external_key VARCHAR(100) NULL,
     club_id INT,
     first_name VARCHAR(100) NOT NULL,
     last_name VARCHAR(100) NOT NULL,
     nationality VARCHAR(100) NOT NULL,
     birth_date DATE NOT NULL,
-    position ENUM('GK','LB','RB','CB','LWB','RWB','CDM','CM','CAM','LW','RW','ST','CF') NOT NULL,
+    position ENUM('GK','LB','RB','CB','LWB','RWB','CDM','CM','CAM','LM','RM','LW','RW','ST','CF') NOT NULL,
     preferred_foot ENUM('LEFT','RIGHT','BOTH') DEFAULT 'RIGHT',
 
     pace INT NOT NULL,
@@ -133,6 +136,9 @@ CREATE TABLE players (
     morale DECIMAL(3,1) DEFAULT 7.0,
     fitness INT DEFAULT 100,
     morale_score INT DEFAULT 70,
+    squad_role ENUM('KEY_PLAYER','REGULAR_STARTER','ROTATION','BENCH','PROSPECT') DEFAULT 'ROTATION',
+    last_played_at DATETIME NULL,
+    last_minutes_played INT DEFAULT 0,
 
     wage INT DEFAULT 0,
     contract_end DATE,
@@ -145,6 +151,10 @@ CREATE TABLE players (
     injury_days INT DEFAULT 0,
     is_on_loan BOOLEAN DEFAULT FALSE,
     is_retired BOOLEAN DEFAULT FALSE,
+    is_academy_origin BOOLEAN DEFAULT 0,
+    academy_origin_club_id INT NULL,
+    academy_intake_season_id INT NULL,
+    academy_intake_batch_key VARCHAR(64) NULL,
 
     growth_rate DECIMAL(3,2) DEFAULT 1.00,
 
@@ -152,9 +162,25 @@ CREATE TABLE players (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE SET NULL,
+    FOREIGN KEY (academy_origin_club_id) REFERENCES clubs(id) ON DELETE SET NULL,
+    UNIQUE KEY uniq_player_external_key (external_key),
     INDEX idx_club (club_id),
     INDEX idx_position (position),
     INDEX idx_overall (overall)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS youth_intake_logs (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    club_id INT NOT NULL,
+    intake_season_id INT NOT NULL,
+    intake_key VARCHAR(64) NOT NULL,
+    academy_level INT NOT NULL DEFAULT 1,
+    generated_count INT NOT NULL DEFAULT 0,
+    generated_player_ids_json JSON NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_club_season_intake (club_id, intake_season_id, intake_key),
+    INDEX idx_intake_club_created (club_id, created_at),
+    FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 -- Abilities
@@ -211,6 +237,14 @@ CREATE TABLE seasons (
     current_week INT DEFAULT 0,
     FOREIGN KEY (competition_id) REFERENCES competitions(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
+
+ALTER TABLE players
+    ADD CONSTRAINT fk_players_academy_intake_season
+    FOREIGN KEY (academy_intake_season_id) REFERENCES seasons(id) ON DELETE SET NULL;
+
+ALTER TABLE youth_intake_logs
+    ADD CONSTRAINT fk_youth_intake_logs_intake_season
+    FOREIGN KEY (intake_season_id) REFERENCES seasons(id) ON DELETE CASCADE;
 
 -- Club Seasons
 CREATE TABLE club_seasons (
@@ -312,7 +346,7 @@ CREATE TABLE match_lineups (
     match_id INT NOT NULL,
     club_id INT NOT NULL,
     player_id INT NOT NULL,
-    position ENUM('GK','LB','RB','CB','LWB','RWB','CDM','CM','CAM','LW','RW','ST','CF') NOT NULL,
+    position ENUM('GK','LB','RB','CB','LWB','RWB','CDM','CM','CAM','LM','RM','LW','RW','ST','CF') NOT NULL,
     is_starter BOOLEAN DEFAULT TRUE,
     shirt_number INT NOT NULL,
     FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE,
@@ -355,7 +389,7 @@ CREATE TABLE tactics (
     club_id INT UNIQUE NOT NULL,
     formation VARCHAR(10) DEFAULT '4-3-3',
     style ENUM('ATTACKING','DEFENSIVE','COUNTER','PRESSING','BALANCED','POSSESSION') DEFAULT 'BALANCED',
-    mentality ENUM('AGGRESSIVE','NORMAL','CAUTIOUS') DEFAULT 'NORMAL',
+    mentality ENUM('ULTRA_ATTACK','ATTACK','BALANCED','DEFEND','ULTRA_DEFEND') DEFAULT 'BALANCED',
     pressing INT DEFAULT 5,
     tempo INT DEFAULT 5,
     width INT DEFAULT 5,
@@ -382,12 +416,16 @@ CREATE TABLE transfers (
     to_club_id INT,
     type ENUM('PERMANENT','LOAN','FREE','YOUTH_PROMOTION') NOT NULL,
     fee BIGINT DEFAULT 0,
-    status ENUM('PENDING','COMPLETED','CANCELLED','REJECTED') DEFAULT 'PENDING',
+    counter_fee BIGINT DEFAULT NULL,
+    negotiation_round TINYINT DEFAULT 0,
+    status ENUM('PENDING','COUNTERED','COMPLETED','CANCELLED','REJECTED','SUPERSEDED') DEFAULT 'PENDING',
     initiated_by INT NOT NULL,
     season_id INT,
     loan_end DATE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     completed_at DATETIME,
+    countered_at DATETIME NULL,
+    responded_at DATETIME NULL,
     FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
     FOREIGN KEY (from_club_id) REFERENCES clubs(id) ON DELETE SET NULL,
     FOREIGN KEY (to_club_id) REFERENCES clubs(id) ON DELETE SET NULL,
@@ -488,13 +526,14 @@ CREATE TABLE IF NOT EXISTS tactic_lineups (
     club_id INT NOT NULL,
     phase_key ENUM('MATCH_1','MATCH_2','RECOVERY','NEXT_DAY') DEFAULT 'MATCH_1',
     player_id INT NOT NULL,
-    position_slot ENUM('GK','LB','RB','CB','LWB','RWB','CDM','CM','CAM','LW','RW','ST','CF') NOT NULL,
+    position_slot ENUM('GK','LB','RB','CB','LWB','RWB','CDM','CM','CAM','LM','RM','LW','RW','ST','CF') NOT NULL,
+    slot_order TINYINT NOT NULL DEFAULT 1,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
     FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
-    UNIQUE KEY unique_active_lineup_slot (club_id, phase_key, position_slot, is_active),
+    UNIQUE KEY unique_active_lineup_slot_order (club_id, phase_key, position_slot, slot_order, is_active),
     INDEX idx_club_phase (club_id, phase_key)
 ) ENGINE=InnoDB;
 
@@ -542,6 +581,27 @@ CREATE TABLE IF NOT EXISTS manager_contract_negotiations (
     INDEX idx_negotiation_application_status (application_id, status),
     INDEX idx_negotiation_coach_status (coach_user_id, status),
     INDEX idx_negotiation_owner_status (owner_user_id, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS manager_contract_terminations (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    contract_id INT NOT NULL,
+    club_id INT NOT NULL,
+    owner_user_id INT NULL,
+    coach_user_id INT NULL,
+    terminated_by_user_id INT NOT NULL,
+    termination_type ENUM('OWNER_TERMINATION','MUTUAL_TERMINATION','ADMIN_FORCED_TERMINATION') NOT NULL,
+    compensation_amount BIGINT DEFAULT 0,
+    reason VARCHAR(1000),
+    governance_case_id INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_termination_contract (contract_id, created_at),
+    INDEX idx_termination_club (club_id, created_at),
+    FOREIGN KEY (contract_id) REFERENCES manager_contracts(id) ON DELETE CASCADE,
+    FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
+    FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (coach_user_id) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (terminated_by_user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 -- Governance: owner/coach dispute case
@@ -568,6 +628,10 @@ CREATE TABLE IF NOT EXISTS club_governance_cases (
     INDEX idx_governance_status (club_id, status)
 ) ENGINE=InnoDB;
 
+ALTER TABLE manager_contract_terminations
+    ADD CONSTRAINT fk_manager_contract_terminations_governance_case
+    FOREIGN KEY (governance_case_id) REFERENCES club_governance_cases(id) ON DELETE SET NULL;
+
 CREATE TABLE IF NOT EXISTS club_governance_decisions (
     id INT AUTO_INCREMENT PRIMARY KEY,
     case_id INT NOT NULL,
@@ -587,7 +651,7 @@ CREATE TABLE IF NOT EXISTS club_finance_ledger (
     id INT AUTO_INCREMENT PRIMARY KEY,
     club_id INT NOT NULL,
     season_id INT,
-    entry_type ENUM('COACH_SALARY','MATCH_REWARD','SEASON_REWARD','GOVERNANCE_PENALTY','GOVERNANCE_COMPENSATION','TRANSFER_IN','TRANSFER_OUT','OWNER_FUNDING','SPONSOR_INCOME','MANUAL_ADMIN_ADJUSTMENT','FACILITY_UPGRADE','FACILITY_DOWNGRADE_REFUND','FACILITY_MAINTENANCE','WAGE','STAFF_WAGE','SPONSOR','TICKET','PRIZE','PENALTY','OTHER') NOT NULL,
+    entry_type ENUM('COACH_SALARY','MATCH_REWARD','SEASON_REWARD','GOVERNANCE_PENALTY','GOVERNANCE_COMPENSATION','TRANSFER_IN','TRANSFER_OUT','OWNER_FUNDING','SPONSOR_INCOME','MANUAL_ADMIN_ADJUSTMENT','FACILITY_UPGRADE','FACILITY_DOWNGRADE_REFUND','FACILITY_MAINTENANCE','MANAGER_TERMINATION_COMPENSATION','WAGE','STAFF_WAGE','SPONSOR','TICKET','PRIZE','PENALTY','OTHER') NOT NULL,
     amount BIGINT NOT NULL,
     description VARCHAR(500),
     reference_type VARCHAR(50),
@@ -643,6 +707,84 @@ CREATE TABLE IF NOT EXISTS club_owner_funding_events (
     FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
     FOREIGN KEY (owner_user_id) REFERENCES users(id) ON DELETE CASCADE,
     INDEX idx_owner_funding_club_date (club_id, created_at)
+) ENGINE=InnoDB;
+
+-- Player/club history awards and records
+CREATE TABLE IF NOT EXISTS player_awards (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    season_id INT NOT NULL,
+    competition_id INT NOT NULL,
+    award_type ENUM('PLAYER_OF_MATCH','PLAYER_OF_WEEK','TOP_SCORER','TOP_ASSIST','BEST_PLAYER','BEST_YOUNG_PLAYER') NOT NULL,
+    player_id INT NOT NULL,
+    club_id INT NOT NULL,
+    match_id INT NULL,
+    week_number INT NULL,
+    score_value DECIMAL(10,2) DEFAULT 0,
+    meta_json JSON NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_award_scope (season_id, competition_id, award_type, match_id, week_number),
+    INDEX idx_award_player (player_id, season_id),
+    FOREIGN KEY (season_id) REFERENCES seasons(id) ON DELETE CASCADE,
+    FOREIGN KEY (competition_id) REFERENCES competitions(id) ON DELETE CASCADE,
+    FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
+    FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
+    FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS club_honors (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    club_id INT NOT NULL,
+    season_id INT NOT NULL,
+    competition_id INT NOT NULL,
+    honor_type ENUM('LEAGUE_TITLE','CUP_WIN','PROMOTION','RELEGATION','CHAMPIONS_QUALIFIED') NOT NULL,
+    details VARCHAR(500),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_honor (club_id, season_id, competition_id, honor_type),
+    INDEX idx_honor_club (club_id, created_at),
+    FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
+    FOREIGN KEY (season_id) REFERENCES seasons(id) ON DELETE CASCADE,
+    FOREIGN KEY (competition_id) REFERENCES competitions(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS club_records (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    club_id INT NOT NULL,
+    record_key ENUM('TOP_SCORER','MOST_APPEARANCES','BEST_SEASON_SCORER') NOT NULL,
+    player_id INT NOT NULL,
+    record_value INT NOT NULL DEFAULT 0,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_club_record (club_id, record_key),
+    FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
+    FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS club_legends (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    club_id INT NOT NULL,
+    player_id INT NOT NULL,
+    legend_score INT NOT NULL DEFAULT 0,
+    status ENUM('ICON','LEGEND') DEFAULT 'LEGEND',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_club_legend_player (club_id, player_id),
+    INDEX idx_legend_club_score (club_id, legend_score),
+    FOREIGN KEY (club_id) REFERENCES clubs(id) ON DELETE CASCADE,
+    FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- Administrative runtime operation logs
+CREATE TABLE IF NOT EXISTS admin_operation_logs (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    admin_user_id INT NOT NULL,
+    action VARCHAR(100) NOT NULL,
+    entity_type VARCHAR(100) NOT NULL,
+    entity_id BIGINT NOT NULL,
+    payload JSON NULL,
+    created_at DATETIME NOT NULL,
+    INDEX idx_admin_operation_date (admin_user_id, created_at),
+    INDEX idx_admin_operation_entity (entity_type, entity_id),
+    FOREIGN KEY (admin_user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 -- Daily cycle snapshots for scheduler observability/replay

@@ -75,4 +75,45 @@
     </table>
 </div>
 
+<div class="card">
+    <h3>Active Manager Contracts</h3>
+    <table class="table">
+        <thead><tr><th>Club</th><th>Owner</th><th>Coach</th><th>Salary</th><th>End date</th><th>Termination</th></tr></thead>
+        <tbody>
+        <?php foreach (($active_contracts ?? []) as $contract): ?>
+            <tr>
+                <td><?= htmlspecialchars((string)$contract['club_name']) ?></td>
+                <td><?= htmlspecialchars((string)($contract['owner_name'] ?? '-')) ?></td>
+                <td><?= htmlspecialchars((string)($contract['coach_name'] ?? '-')) ?></td>
+                <td><?= number_format((int)($contract['salary'] ?? 0)) ?></td>
+                <td><?= htmlspecialchars((string)($contract['end_date'] ?? '-')) ?></td>
+                <td style="min-width:360px;">
+                    <form method="post" action="/manager/contracts/terminate">
+                        <input type="hidden" name="club_id" value="<?= (int)$contract['club_id'] ?>">
+                        <div class="grid">
+                            <div class="form-group">
+                                <select name="termination_type">
+                                    <option value="OWNER_TERMINATION">Owner termination</option>
+                                    <option value="MUTUAL_TERMINATION">Mutual termination</option>
+                                    <?php if (\Auth::isAdmin()): ?>
+                                        <option value="ADMIN_FORCED_TERMINATION">Admin forced termination</option>
+                                    <?php endif; ?>
+                                </select>
+                            </div>
+                            <div class="form-group"><input type="number" min="0" name="compensation_amount" placeholder="Compensation amount"></div>
+                        </div>
+                        <div class="form-group">
+                            <textarea name="termination_reason" rows="2" placeholder="Termination reason"></textarea>
+                        </div>
+                        <label><input type="checkbox" name="open_governance_case" value="1"> Open governance case for review</label><br>
+                        <button class="btn btn-danger" type="submit">Terminate Contract</button>
+                    </form>
+                </td>
+            </tr>
+        <?php endforeach; ?>
+        <?php if (empty($active_contracts)): ?><tr><td colspan="6">No active contracts.</td></tr><?php endif; ?>
+        </tbody>
+    </table>
+</div>
+
 <?php require __DIR__ . '/../layout/footer.php'; ?>

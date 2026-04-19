@@ -18,4 +18,4 @@ CREATE TABLE IF NOT EXISTS manager_contract_negotiations (
     INDEX idx_negotiation_application_status (application_id, status),
     INDEX idx_negotiation_coach_status (coach_user_id, status),
     INDEX idx_negotiation_owner_status (owner_user_id, status)
-);
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

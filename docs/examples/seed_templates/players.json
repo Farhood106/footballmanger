@@ -1,0 +1,26 @@
+[
+  {
+    "external_key": "PER_0001",
+    "club_external_key": "PERSEPOLIS",
+    "first_name": "Ali",
+    "last_name": "Karimi",
+    "nationality": "Iran",
+    "birth_date": "2003-03-22",
+    "position": "CM",
+    "preferred_foot": "RIGHT",
+    "overall": 72,
+    "potential": 81,
+    "pace": 70,
+    "shooting": 68,
+    "passing": 74,
+    "dribbling": 73,
+    "defending": 64,
+    "physical": 69,
+    "fitness": 95,
+    "morale_score": 74,
+    "squad_role": "REGULAR_STARTER",
+    "wage": 35000,
+    "contract_end": "2028-06-30",
+    "market_value": 6400000
+  }
+]

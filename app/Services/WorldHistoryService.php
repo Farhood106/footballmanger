@@ -6,7 +6,9 @@ class WorldHistoryService {
 
     public function __construct(?Database $db = null) {
         $this->db = $db ?? Database::getInstance();
-        $this->ensureHistoryTables();
+        if ($this->db->shouldRunRuntimeDdlFallback()) {
+            $this->ensureHistoryTables();
+        }
     }
 
     public function recordPlayerOfMatch(int $matchId, int $seasonId, int $competitionId, array $potm): void {
@@ -119,7 +121,7 @@ class WorldHistoryService {
 
     public function getRecentRecognitionsForClub(int $clubId, int $limit = 10): array {
         return $this->db->fetchAll(
-            "SELECT pa.*, p.name AS player_name, c.name AS competition_name
+            "SELECT pa.*, CONCAT(p.first_name, ' ', p.last_name) AS player_name, c.name AS competition_name
              FROM player_awards pa
              JOIN players p ON p.id = pa.player_id
              JOIN competitions c ON c.id = pa.competition_id
@@ -133,7 +135,7 @@ class WorldHistoryService {
 
     public function getSeasonAwardsForClub(int $clubId, int $limit = 15): array {
         return $this->db->fetchAll(
-            "SELECT pa.*, p.name AS player_name, c.name AS competition_name, s.name AS season_name
+            "SELECT pa.*, CONCAT(p.first_name, ' ', p.last_name) AS player_name, c.name AS competition_name, s.name AS season_name
              FROM player_awards pa
              JOIN players p ON p.id = pa.player_id
              JOIN competitions c ON c.id = pa.competition_id
@@ -161,7 +163,7 @@ class WorldHistoryService {
 
     public function getClubRecords(int $clubId): array {
         return $this->db->fetchAll(
-            "SELECT cr.*, p.name AS player_name
+            "SELECT cr.*, CONCAT(p.first_name, ' ', p.last_name) AS player_name
              FROM club_records cr
              LEFT JOIN players p ON p.id = cr.player_id
              WHERE cr.club_id = ?
@@ -172,7 +174,7 @@ class WorldHistoryService {
 
     public function getClubLegends(int $clubId, int $limit = 20): array {
         return $this->db->fetchAll(
-            "SELECT cl.*, p.name AS player_name
+            "SELECT cl.*, CONCAT(p.first_name, ' ', p.last_name) AS player_name
              FROM club_legends cl
              JOIN players p ON p.id = cl.player_id
              WHERE cl.club_id = ?

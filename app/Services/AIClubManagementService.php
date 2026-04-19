@@ -6,7 +6,9 @@ class AIClubManagementService {
 
     public function __construct(?Database $db = null) {
         $this->db = $db ?? Database::getInstance();
-        $this->ensureControlRuntimeTable();
+        if ($this->db->shouldRunRuntimeDdlFallback()) {
+            $this->ensureControlRuntimeTable();
+        }
     }
 
     public static function determineControlState(array $club): array {
@@ -96,7 +98,8 @@ class AIClubManagementService {
                  WHERE club_id = ? AND is_retired = 0",
                 [$clubId]
             );
-            return ['ok' => true, 'mode' => 'recovery'];
+            $market = $this->runDailyTransferMarket($clubId);
+            return ['ok' => true, 'mode' => 'recovery', 'market' => $market];
         }
 
         $this->db->execute(
@@ -107,7 +110,83 @@ class AIClubManagementService {
             [$clubId]
         );
 
-        return ['ok' => true, 'mode' => 'balanced'];
+        $market = $this->runDailyTransferMarket($clubId);
+        return ['ok' => true, 'mode' => 'balanced', 'market' => $market];
+    }
+
+    public function runDailyTransferMarket(int $clubId): array {
+        $transferModel = new TransferModel();
+        $listed = 0;
+        $responded = 0;
+        $bidPlaced = 0;
+
+        $candidates = $this->db->fetchAll(
+            "SELECT id, club_id, is_transfer_listed, market_value, wage, morale_score, squad_role, last_minutes_played, potential, overall
+             FROM players
+             WHERE club_id = ? AND is_retired = 0 AND is_injured = 0
+             ORDER BY overall ASC, id ASC
+             LIMIT 8",
+            [$clubId]
+        );
+        foreach ($candidates as $p) {
+            if ((int)($p['is_transfer_listed'] ?? 0) === 1) {
+                continue;
+            }
+            $role = strtoupper((string)($p['squad_role'] ?? 'ROTATION'));
+            $moraleScore = (int)($p['morale_score'] ?? 70);
+            $lastMinutes = (int)($p['last_minutes_played'] ?? 0);
+            $wage = (int)($p['wage'] ?? 0);
+            $canList = in_array($role, ['BENCH', 'PROSPECT', 'ROTATION'], true) && ($moraleScore < 58 || $lastMinutes <= 10 || $wage > 26000);
+            if ($canList) {
+                $asking = max(1, (int)round(((int)($p['market_value'] ?? 1)) * 1.03));
+                $transferModel->setTransferListed((int)$p['id'], $clubId, true, $asking);
+                $listed++;
+                if ($listed >= 2) {
+                    break;
+                }
+            }
+        }
+
+        $incoming = $transferModel->getIncomingOffers($clubId);
+        foreach ($incoming as $offer) {
+            if (($offer['status'] ?? '') !== 'PENDING') {
+                continue;
+            }
+            $decision = $transferModel->determineSellerDecision($offer, $offer);
+            if (($decision['action'] ?? '') === 'accept') {
+                $transferModel->accept((int)$offer['id']);
+            } elseif (($decision['action'] ?? '') === 'counter') {
+                $transferModel->counter((int)$offer['id'], $clubId, (int)($decision['counter_fee'] ?? 0));
+            } else {
+                $transferModel->reject((int)$offer['id']);
+            }
+            $responded++;
+        }
+
+        $club = $this->db->fetchOne("SELECT id, balance FROM clubs WHERE id = ?", [$clubId]);
+        if ((int)($club['balance'] ?? 0) > 1500000) {
+            $target = $this->db->fetchOne(
+                "SELECT p.*
+                 FROM players p
+                 JOIN clubs c ON c.id = p.club_id
+                 WHERE p.is_transfer_listed = 1
+                   AND p.club_id <> ?
+                   AND p.is_retired = 0
+                 ORDER BY p.morale_score ASC, p.last_minutes_played ASC, p.market_value ASC
+                 LIMIT 1",
+                [$clubId]
+            );
+            if ($target) {
+                $pricing = $transferModel->buildPricingContext($target);
+                $bid = (int)$pricing['min_accept'];
+                if ($bid > 0 && $bid < (int)$club['balance']) {
+                    $transferModel->makeBid((int)$target['id'], (int)$target['club_id'], $clubId, $bid);
+                    $bidPlaced = 1;
+                }
+            }
+        }
+
+        return ['listed' => $listed, 'responded' => $responded, 'bid_placed' => $bidPlaced];
     }
 
     public function ensureLineupForMatchPhase(int $clubId, string $lineupPhase): array {
@@ -138,6 +217,7 @@ class AIClubManagementService {
                 'phase_key' => $lineupPhase,
                 'player_id' => (int)$row['player_id'],
                 'position_slot' => $row['position_slot'],
+                'slot_order' => (int)($row['slot_order'] ?? 1),
                 'is_active' => 1,
             ]);
         }
@@ -153,34 +233,50 @@ class AIClubManagementService {
 
     private function fetchCandidateLineupRows(int $clubId, string $lineupPhase): array {
         return $this->db->fetchAll(
-            "SELECT tl.player_id, tl.position_slot, p.position AS actual_position
+            "SELECT tl.player_id, tl.position_slot, tl.slot_order, p.position AS actual_position
              FROM tactic_lineups tl
              JOIN players p ON p.id = tl.player_id
              WHERE tl.club_id = ? AND tl.phase_key IN (?, 'MATCH_1') AND tl.is_active = 1
-             ORDER BY CASE WHEN tl.phase_key = ? THEN 0 ELSE 1 END, tl.position_slot",
+             ORDER BY CASE WHEN tl.phase_key = ? THEN 0 ELSE 1 END, tl.position_slot, tl.slot_order, tl.id",
             [$clubId, $lineupPhase, $lineupPhase]
         );
     }
 
     private function buildAiLineup(int $clubId): array {
         $players = $this->db->fetchAll(
-            "SELECT id, position, overall
+            "SELECT id, position, overall, fitness, fatigue, last_minutes_played, last_played_at
              FROM players
              WHERE club_id = ? AND is_retired = 0 AND is_injured = 0
-             ORDER BY overall DESC, id ASC",
+             ORDER BY overall DESC, fitness DESC, id ASC",
             [$clubId]
         );
 
-        $slots = ['GK','LB','CB','CB','RB','CM','CM','CAM','LW','RW','ST'];
+        $slots = [
+            ['position_slot' => 'GK', 'slot_order' => 1],
+            ['position_slot' => 'LB', 'slot_order' => 1],
+            ['position_slot' => 'CB', 'slot_order' => 1],
+            ['position_slot' => 'CB', 'slot_order' => 2],
+            ['position_slot' => 'RB', 'slot_order' => 1],
+            ['position_slot' => 'CM', 'slot_order' => 1],
+            ['position_slot' => 'CM', 'slot_order' => 2],
+            ['position_slot' => 'CAM', 'slot_order' => 1],
+            ['position_slot' => 'LW', 'slot_order' => 1],
+            ['position_slot' => 'RW', 'slot_order' => 1],
+            ['position_slot' => 'ST', 'slot_order' => 1],
+        ];
         $selected = [];
         $used = [];
 
         foreach ($slots as $slot) {
-            $picked = $this->pickBestForSlot($players, $slot, $used);
+            $picked = $this->pickBestForSlot($players, (string)$slot['position_slot'], $used);
             if (!$picked) {
                 break;
             }
-            $selected[] = ['player_id' => (int)$picked['id'], 'position_slot' => $slot];
+            $selected[] = [
+                'player_id' => (int)$picked['id'],
+                'position_slot' => (string)$slot['position_slot'],
+                'slot_order' => (int)$slot['slot_order'],
+            ];
             $used[(int)$picked['id']] = true;
         }
 
@@ -188,7 +284,12 @@ class AIClubManagementService {
             foreach ($players as $p) {
                 $pid = (int)$p['id'];
                 if (isset($used[$pid])) continue;
-                $selected[] = ['player_id' => $pid, 'position_slot' => $slots[count($selected)] ?? 'CM'];
+                $fallback = $slots[count($selected)] ?? ['position_slot' => 'CM', 'slot_order' => 1];
+                $selected[] = [
+                    'player_id' => $pid,
+                    'position_slot' => (string)$fallback['position_slot'],
+                    'slot_order' => (int)$fallback['slot_order'],
+                ];
                 $used[$pid] = true;
                 if (count($selected) >= 11) break;
             }
@@ -211,24 +312,41 @@ class AIClubManagementService {
             default => ['CM', 'CDM', 'CAM'],
         };
 
-        foreach ($preferred as $pos) {
-            foreach ($players as $p) {
-                $pid = (int)$p['id'];
-                if (isset($used[$pid])) continue;
-                if (($p['position'] ?? '') === $pos) {
-                    return $p;
-                }
-            }
-        }
-
+        $best = null;
+        $bestScore = -INF;
         foreach ($players as $p) {
             $pid = (int)$p['id'];
-            if (!isset($used[$pid])) {
-                return $p;
+            if (isset($used[$pid])) continue;
+
+            $position = (string)($p['position'] ?? '');
+            $posRank = array_search($position, $preferred, true);
+            $posBonus = $posRank === false ? -8.0 : (3.0 - min(3.0, (float)$posRank));
+
+            $fitness = (int)($p['fitness'] ?? 100);
+            $fatigue = (int)($p['fatigue'] ?? max(0, 100 - $fitness));
+            $heavyMinutesPenalty = ((int)($p['last_minutes_played'] ?? 0) >= 85) ? 3.5 : 0.0;
+            $recentPlayedPenalty = 0.0;
+            if (!empty($p['last_played_at'])) {
+                $daysSince = (int)floor((time() - strtotime((string)$p['last_played_at'])) / 86400);
+                if ($daysSince <= 2) {
+                    $recentPlayedPenalty = 1.5;
+                }
+            }
+
+            $score = ((float)($p['overall'] ?? 50) * 1.0)
+                + ($fitness * 0.15)
+                - ($fatigue * 0.12)
+                + $posBonus
+                - $heavyMinutesPenalty
+                - $recentPlayedPenalty;
+
+            if ($score > $bestScore) {
+                $bestScore = $score;
+                $best = $p;
             }
         }
 
-        return null;
+        return $best;
     }
 
     private function syncClubVacancyState(int $clubId): bool {

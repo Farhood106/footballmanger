@@ -32,8 +32,8 @@ class MatchEngine {
 
         try {
             // ۱. بارگذاری داده‌ها
-            $homeSquad = $this->getSquad($match['home_club_id']);
-        $awaySquad = $this->getSquad($match['away_club_id']);
+            $homeSquad = $this->getSquad((int)$match['home_club_id'], (int)$match['id']);
+        $awaySquad = $this->getSquad((int)$match['away_club_id'], (int)$match['id']);
         $homeTactics = $this->getTactics($match['home_club_id']);
         $awayTactics = $this->getTactics($match['away_club_id']);
 
@@ -138,10 +138,35 @@ class MatchEngine {
 
     // ─── محاسبه قدرت تیم ───────────────────────────────────────────────────
 
-    private function getSquad(int $clubId): array {
+    private function getSquad(int $clubId, ?int $matchId = null): array {
+        if ($matchId !== null) {
+            $lockedCount = $this->db->fetchOne(
+                "SELECT COUNT(*) AS total FROM match_lineups WHERE match_id = ? AND club_id = ? AND is_starter = 1",
+                [$matchId, $clubId]
+            );
+            if ((int)($lockedCount['total'] ?? 0) >= 11) {
+                return $this->db->fetchAll(
+                    "SELECT p.*,
+                            GROUP_CONCAT(a.code SEPARATOR ',') as abilities,
+                            COALESCE(ml.position, p.position) AS lineup_position,
+                            COALESCE(ml.is_starter, 0) AS lineup_is_starter
+                     FROM players p
+                     LEFT JOIN match_lineups ml ON ml.player_id = p.id AND ml.match_id = ? AND ml.club_id = ?
+                     LEFT JOIN player_abilities pa ON p.id = pa.player_id AND pa.is_active = 1
+                     LEFT JOIN abilities a ON pa.ability_id = a.id
+                     WHERE p.club_id = ? AND p.is_injured = 0 AND p.is_retired = 0
+                     GROUP BY p.id, ml.position, ml.is_starter
+                     ORDER BY COALESCE(ml.is_starter, 0) DESC, p.overall DESC
+                     LIMIT 18",
+                    [$matchId, $clubId, $clubId]
+                );
+            }
+        }
+
         return $this->db->fetchAll(
             "SELECT p.*, 
-                    GROUP_CONCAT(a.code SEPARATOR ',') as abilities
+                    GROUP_CONCAT(a.code SEPARATOR ',') as abilities,
+                    p.position AS lineup_position
              FROM players p
              LEFT JOIN player_abilities pa ON p.id = pa.player_id AND pa.is_active = 1
              LEFT JOIN abilities a ON pa.ability_id = a.id
@@ -161,7 +186,11 @@ class MatchEngine {
             'mentality' => 'NORMAL',
             'pressing' => 5,
             'tempo' => 5,
-            'width' => 5
+            'width' => 5,
+            'captain' => null,
+            'penalty_taker' => null,
+            'freekick_taker' => null,
+            'corner_taker' => null,
         ];
     }
 
@@ -173,7 +202,7 @@ class MatchEngine {
 
         foreach ($starters as $player) {
             $effective = $this->effectiveOverall($player);
-            $pos = $player['position'];
+            $pos = (string)($player['lineup_position'] ?? $player['position']);
 
             if (in_array($pos, ['ST', 'CF', 'LW', 'RW', 'CAM'])) {
                 $attack += $effective;
@@ -201,12 +230,15 @@ class MatchEngine {
             default     => ['attack' => 1.0, 'defense' => 1.0, 'mid' => 1.0],
         };
 
+        $responsibility = $this->buildResponsibilityImpact($starters, $tactics);
+
         return [
             'attack'  => $attack * $tacticBonus['attack'],
-            'defense' => $defense * $tacticBonus['defense'],
-            'midfield'=> $midfield * $tacticBonus['mid'],
+            'defense' => $defense * $tacticBonus['defense'] * $responsibility['captain_defense'],
+            'midfield'=> $midfield * $tacticBonus['mid'] * $responsibility['captain_midfield'],
             'overall' => ($attack + $defense + $midfield) / 3,
-            'style'   => $tactics['style']
+            'style'   => $tactics['style'],
+            'set_piece_mod' => $responsibility['set_piece_mod'],
         ];
     }
 
@@ -270,10 +302,45 @@ class MatchEngine {
         $homeXG *= $homeTacticMod;
         $awayXG *= $awayTacticMod;
 
+        $homeXG *= (float)($home['set_piece_mod'] ?? 1.0);
+        $awayXG *= (float)($away['set_piece_mod'] ?? 1.0);
+
         // محدود کردن به بازه منطقی
         return [
             'home' => max(0.3, min(4.5, $homeXG)),
             'away' => max(0.3, min(4.5, $awayXG))
+        ];
+    }
+
+    private function buildResponsibilityImpact(array $starters, array $tactics): array {
+        $find = function (string $field) use ($starters, $tactics): ?array {
+            $pid = (int)($tactics[$field] ?? 0);
+            if ($pid <= 0) return null;
+            foreach ($starters as $player) {
+                if ((int)($player['id'] ?? 0) === $pid) return $player;
+            }
+            return null;
+        };
+
+        $captain = $find('captain');
+        $penalty = $find('penalty_taker');
+        $freekick = $find('freekick_taker');
+        $corner = $find('corner_taker');
+
+        $captainMorale = (float)($captain['morale'] ?? 6.5);
+        $captainOverall = (int)($captain['overall'] ?? 70);
+        $captainBoost = 1.0 + max(0.0, min(0.03, (($captainMorale - 6.0) * 0.008) + (($captainOverall - 70) * 0.0003)));
+
+        $penaltyQuality = $penalty ? ((int)$penalty['shooting'] * 0.6 + (int)$penalty['overall'] * 0.2 + (float)$penalty['morale'] * 2.0) : 70.0;
+        $freekickQuality = $freekick ? ((int)$freekick['passing'] * 0.45 + (int)$freekick['shooting'] * 0.25 + (int)$freekick['dribbling'] * 0.15 + (int)$freekick['overall'] * 0.15) : 70.0;
+        $cornerQuality = $corner ? ((int)$corner['passing'] * 0.50 + (int)$corner['dribbling'] * 0.20 + (int)$corner['overall'] * 0.20 + (int)$corner['pace'] * 0.10) : 70.0;
+        $setPieceQuality = ($penaltyQuality + $freekickQuality + $cornerQuality) / 3.0;
+        $setPieceMod = 1.0 + max(-0.03, min(0.05, ($setPieceQuality - 70.0) / 500.0));
+
+        return [
+            'captain_midfield' => $captainBoost,
+            'captain_defense' => 1.0 + (($captainBoost - 1.0) * 0.8),
+            'set_piece_mod' => $setPieceMod,
         ];
     }
 
@@ -563,6 +630,7 @@ class MatchEngine {
         $starters = array_merge(array_slice($homeSquad, 0, 11), array_slice($awaySquad, 0, 11));
         $benches = array_merge(array_slice($homeSquad, 11, 7), array_slice($awaySquad, 11, 7));
         $allPlayers = array_merge($starters, $benches);
+        $playedAt = date('Y-m-d H:i:s');
         $seasonId = (int)($match['season_id'] ?? $this->getCurrentSeasonId());
         $ratingByPlayer = [];
         foreach ($ratings as $r) {
@@ -589,7 +657,7 @@ class MatchEngine {
                 $this->db->query("UPDATE players SET is_injured = 1, injury_days = ? WHERE id = ?", [$details['severity'], $playerId]);
             }
 
-            $this->playerCareer->applyPostMatchPlayerUpdate($player, $rating, $started, $minutesPlayed, $injury !== false);
+            $this->playerCareer->applyPostMatchPlayerUpdate($player, $rating, $started, $minutesPlayed, $injury !== false, $playedAt);
 
             // آپدیت آمار فصل + تاریخچه حرفه‌ای
             $this->updateSeasonStats($playerId, $seasonId, $rating, $minutesPlayed, $started);
