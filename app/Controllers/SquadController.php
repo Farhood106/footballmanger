@@ -20,7 +20,7 @@ class SquadController extends Controller {
             $this->redirect('/login');
         }
 
-        $club = $this->clubModel->find($this->getClubId());
+        $club = $this->requireClubForPage();
         $squad = $this->clubModel->getSquad($club['id']);
         $injured = $this->playerModel->getInjured($club['id']);
         $roleLabels = $this->playerModel->getSquadRoleLabels();
@@ -65,7 +65,7 @@ class SquadController extends Controller {
             $this->redirect('/login');
         }
 
-        $club = $this->clubModel->find($this->getClubId());
+        $club = $this->requireClubForPage();
         $activeTactic = $this->tacticModel->getActiveByClub($club['id']);
         $squad = $this->clubModel->getSquad($club['id']);
         $formations = $this->tacticModel->getValidFormations();
@@ -101,7 +101,7 @@ class SquadController extends Controller {
             $this->json(['error' => 'Unauthorized'], 401);
         }
 
-        $clubId = $this->getClubId();
+        $clubId = $this->requireClubIdForJson();
         $formation = (string)($_POST['formation'] ?? '');
         $mentality = $_POST['mentality'] ?? 'BALANCED';
         $phaseKey = (string)($_POST['phase_key'] ?? 'MATCH_1');
@@ -167,9 +167,14 @@ class SquadController extends Controller {
             $this->redirect('/login');
         }
 
+        $clubId = $this->getClubId();
+        if ($clubId <= 0) {
+            $this->redirect('/dashboard?error=' . urlencode('هیچ باشگاهی برای حساب شما تنظیم نشده است.'));
+        }
+
         $player = $this->playerModel->getWithAbilities($playerId);
-        if (!$player || $player['club_id'] != $this->getClubId()) {
-            $this->redirect('/squad');
+        if (!$player || $player['club_id'] != $clubId) {
+            $this->redirect('/squad?error=' . urlencode('بازیکن برای باشگاه فعلی در دسترس نیست.'));
         }
 
         $seasonStats = $this->playerModel->getSeasonStats($playerId, $this->getCurrentSeasonId());
@@ -188,7 +193,7 @@ class SquadController extends Controller {
             $this->json(['error' => 'Unauthorized'], 401);
         }
 
-        $clubId = $this->getClubId();
+        $clubId = $this->requireClubIdForJson();
         $playerId = (int)($_POST['player_id'] ?? 0);
         $role = (string)($_POST['squad_role'] ?? '');
         if ($playerId <= 0 || $role === '') {
@@ -209,8 +214,38 @@ class SquadController extends Controller {
     }
 
     private function getClubId(): int {
-        $club = (new UserModel())->getClub(Auth::id());
+        $club = $this->resolveCurrentClub();
         return $club['id'] ?? 0;
+    }
+
+    private function resolveCurrentClub(): ?array {
+        $requestedClubId = (int)($_GET['club_id'] ?? $_POST['club_id'] ?? 0);
+        if ($requestedClubId > 0 && Auth::isAdmin()) {
+            $requestedClub = $this->clubModel->find($requestedClubId);
+            if ($requestedClub) {
+                return $requestedClub;
+            }
+        }
+
+        return (new UserModel())->getClub(Auth::id());
+    }
+
+    private function requireClubForPage(): array {
+        $club = $this->resolveCurrentClub();
+        if (!$club) {
+            $this->redirect('/dashboard?error=' . urlencode('هیچ باشگاهی برای حساب شما تنظیم نشده است.'));
+        }
+
+        return $club;
+    }
+
+    private function requireClubIdForJson(): int {
+        $clubId = $this->getClubId();
+        if ($clubId <= 0) {
+            $this->json(['error' => 'هیچ باشگاهی برای حساب شما تنظیم نشده است.'], 400);
+        }
+
+        return $clubId;
     }
 
     private function getCurrentSeasonId(): int {
