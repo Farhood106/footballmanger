@@ -6,6 +6,14 @@ class TacticModel extends BaseModel {
 
     private const DEFAULT_PHASE = 'MATCH_1';
     private const DEFAULT_FORMATION = '4-3-3';
+    private const DEFAULT_MENTALITY = 'BALANCED';
+    private const MENTALITIES = [
+        'ULTRA_ATTACK' => 'حمله کامل',
+        'ATTACK' => 'تهاجمی',
+        'BALANCED' => 'متعادل',
+        'DEFEND' => 'دفاعی',
+        'ULTRA_DEFEND' => 'دفاع کامل',
+    ];
     private const FORMATIONS = [
         '4-4-2' => [
             ['slot_key' => 'GK__1', 'position_slot' => 'GK', 'slot_order' => 1, 'label' => 'Goalkeeper', 'board_x' => 50, 'board_y' => 90],
@@ -247,6 +255,28 @@ class TacticModel extends BaseModel {
 
     public function getDefaultFormation(): string {
         return self::DEFAULT_FORMATION;
+    }
+
+    public function getValidMentalities(): array {
+        return self::MENTALITIES;
+    }
+
+    public function getDefaultMentality(): string {
+        return self::DEFAULT_MENTALITY;
+    }
+
+    public function normalizeMentality(?string $mentality): string {
+        $value = strtoupper(trim((string)$mentality));
+        $legacyMap = [
+            'AGGRESSIVE' => 'ATTACK',
+            'NORMAL' => 'BALANCED',
+            'CAUTIOUS' => 'DEFEND',
+        ];
+        if (isset($legacyMap[$value])) {
+            $value = $legacyMap[$value];
+        }
+
+        return isset(self::MENTALITIES[$value]) ? $value : self::DEFAULT_MENTALITY;
     }
 
     public function buildLineupSelectionData(array $squad, array $formationSlots, array $selectedMap): array {

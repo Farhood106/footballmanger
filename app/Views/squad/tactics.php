@@ -84,25 +84,16 @@
                 <small>برای به‌روزرسانی چیدمان زمین بر اساس فرمیشن جدید، ذخیره کنید.</small>
             </div>
 
-            <div class="form-group">
-                <label>ذهنیت</label>
-                <select name="mentality">
-                    <?php
-                    $mentalities = [
-                        'ULTRA_ATTACK' => 'حمله کامل',
-                        'ATTACK'       => 'تهاجمی',
-                        'BALANCED'     => 'متعادل',
-                        'DEFEND'       => 'دفاعی',
-                        'ULTRA_DEFEND' => 'دفاع کامل',
-                    ];
-                    foreach ($mentalities as $key => $label):
-                    ?>
+                <div class="form-group">
+                    <label>ذهنیت</label>
+                    <select name="mentality">
+                    <?php foreach (($mentalities ?? []) as $key => $label): ?>
                         <option value="<?= $key ?>" <?= ($tactic['mentality'] ?? '') == $key ? 'selected' : '' ?>>
                             <?= $label ?>
                         </option>
                     <?php endforeach; ?>
-                </select>
-            </div>
+                    </select>
+                </div>
         </div>
 
         <h3 style="margin: 22px 0 8px;">بورد گرافیکی تاکتیک</h3>

@@ -70,7 +70,7 @@ class SquadController extends Controller {
         if (!$activeTactic) {
             $this->tacticModel->saveTacticalSetup((int)$club['id'], [
                 'formation' => $this->tacticModel->getDefaultFormation(),
-                'mentality' => 'BALANCED',
+                'mentality' => $this->tacticModel->getDefaultMentality(),
                 'captain' => null,
                 'penalty_taker' => null,
                 'freekick_taker' => null,
@@ -94,13 +94,16 @@ class SquadController extends Controller {
         $formationSlots = $this->tacticModel->getFormationSlots($selectedFormation);
         $lineupBoard = $this->tacticModel->buildLineupSelectionData($squad, $formationSlots, $existingByKey);
         $activeTactic = $this->tacticModel->normalizeResponsibilitiesForLineup($activeTactic, $lineupBoard);
+        $activeTactic['mentality'] = $this->tacticModel->normalizeMentality((string)($activeTactic['mentality'] ?? ''));
         $responsibilityRankings = $this->tacticModel->buildResponsibilityRankings($squad, $lineupBoard);
+        $mentalities = $this->tacticModel->getValidMentalities();
 
         $this->view('squad/tactics', [
             'club' => $club,
             'tactic' => $activeTactic,
             'squad' => $squad,
             'formations' => $formations,
+            'mentalities' => $mentalities,
             'selected_formation' => $selectedFormation,
             'phase_key' => $phaseKey,
             'lineup_board' => $lineupBoard,
@@ -115,7 +118,7 @@ class SquadController extends Controller {
 
         $clubId = $this->requireClubIdForJson();
         $formation = (string)($_POST['formation'] ?? '');
-        $mentality = $_POST['mentality'] ?? 'BALANCED';
+        $mentality = $this->tacticModel->normalizeMentality((string)($_POST['mentality'] ?? $this->tacticModel->getDefaultMentality()));
         $phaseKey = (string)($_POST['phase_key'] ?? 'MATCH_1');
         $lineupInput = $_POST['lineup'] ?? [];
         if (!is_array($lineupInput)) {
