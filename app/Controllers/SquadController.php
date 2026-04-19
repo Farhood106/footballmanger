@@ -67,6 +67,17 @@ class SquadController extends Controller {
 
         $club = $this->requireClubForPage();
         $activeTactic = $this->tacticModel->getActiveByClub($club['id']);
+        if (!$activeTactic) {
+            $this->tacticModel->saveTacticalSetup((int)$club['id'], [
+                'formation' => $this->tacticModel->getDefaultFormation(),
+                'mentality' => 'BALANCED',
+                'captain' => null,
+                'penalty_taker' => null,
+                'freekick_taker' => null,
+                'corner_taker' => null,
+            ]);
+            $activeTactic = $this->tacticModel->getActiveByClub($club['id']) ?? [];
+        }
         $squad = $this->clubModel->getSquad($club['id']);
         $formations = $this->tacticModel->getValidFormations();
         $phaseKey = (string)($_GET['phase_key'] ?? 'MATCH_1');
@@ -82,6 +93,7 @@ class SquadController extends Controller {
         }
         $formationSlots = $this->tacticModel->getFormationSlots($selectedFormation);
         $lineupBoard = $this->tacticModel->buildLineupSelectionData($squad, $formationSlots, $existingByKey);
+        $activeTactic = $this->tacticModel->normalizeResponsibilitiesForLineup($activeTactic, $lineupBoard);
         $responsibilityRankings = $this->tacticModel->buildResponsibilityRankings($squad, $lineupBoard);
 
         $this->view('squad/tactics', [
@@ -117,6 +129,7 @@ class SquadController extends Controller {
         $slots = $this->tacticModel->getFormationSlots($formation);
         $lineupRows = [];
         $seenPlayers = [];
+        $lineupPlayerIds = [];
         foreach ($slots as $slot) {
             $slotKey = (string)$slot['slot_key'];
             $playerId = (int)($lineupInput[$slotKey] ?? 0);
@@ -127,6 +140,7 @@ class SquadController extends Controller {
                 $this->json(['error' => 'یک بازیکن نمی‌تواند در چند اسلات همزمان قرار گیرد'], 400);
             }
             $seenPlayers[$playerId] = true;
+            $lineupPlayerIds[$playerId] = true;
             $lineupRows[] = [
                 'position_slot' => (string)$slot['position_slot'],
                 'slot_order' => (int)$slot['slot_order'],
@@ -149,17 +163,33 @@ class SquadController extends Controller {
             }
         }
 
-        $this->tacticModel->saveTacticalSetup($clubId, [
+        $normalizedRoles = [
+            'captain' => ($captain > 0 && isset($lineupPlayerIds[$captain])) ? $captain : null,
+            'penalty_taker' => ($penaltyTaker > 0 && isset($lineupPlayerIds[$penaltyTaker])) ? $penaltyTaker : null,
+            'freekick_taker' => ($freekickTaker > 0 && isset($lineupPlayerIds[$freekickTaker])) ? $freekickTaker : null,
+            'corner_taker' => ($cornerTaker > 0 && isset($lineupPlayerIds[$cornerTaker])) ? $cornerTaker : null,
+        ];
+        $clearedRoles = [];
+        if ($captain > 0 && $normalizedRoles['captain'] === null) $clearedRoles[] = 'کاپیتان';
+        if ($penaltyTaker > 0 && $normalizedRoles['penalty_taker'] === null) $clearedRoles[] = 'پنالتی';
+        if ($freekickTaker > 0 && $normalizedRoles['freekick_taker'] === null) $clearedRoles[] = 'ضربه آزاد';
+        if ($cornerTaker > 0 && $normalizedRoles['corner_taker'] === null) $clearedRoles[] = 'کرنر';
+
+        $this->tacticModel->saveSetupAndLineup($clubId, [
             'formation' => $formation,
             'mentality' => $mentality,
-            'captain' => $captain > 0 ? $captain : null,
-            'penalty_taker' => $penaltyTaker > 0 ? $penaltyTaker : null,
-            'freekick_taker' => $freekickTaker > 0 ? $freekickTaker : null,
-            'corner_taker' => $cornerTaker > 0 ? $cornerTaker : null,
-        ]);
+            'captain' => $normalizedRoles['captain'],
+            'penalty_taker' => $normalizedRoles['penalty_taker'],
+            'freekick_taker' => $normalizedRoles['freekick_taker'],
+            'corner_taker' => $normalizedRoles['corner_taker'],
+        ], $phaseKey, $lineupRows);
 
-        $this->tacticModel->saveLineup($clubId, $phaseKey, $lineupRows);
-        $this->json(['success' => true, 'message' => 'تاکتیک با موفقیت ذخیره شد', 'reload' => true]);
+        $message = 'تاکتیک با موفقیت ذخیره شد';
+        if (!empty($clearedRoles)) {
+            $message .= ' (مسئولیت‌های خارج از ترکیب اصلی حذف شدند: ' . implode('، ', $clearedRoles) . ')';
+        }
+
+        $this->json(['success' => true, 'message' => $message, 'reload' => true]);
     }
 
     public function playerDetail(int $playerId): void {

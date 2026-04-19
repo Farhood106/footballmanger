@@ -178,6 +178,20 @@ class TacticModel extends BaseModel {
         return $this->create(array_merge(['club_id' => $clubId], $setup));
     }
 
+    public function saveSetupAndLineup(int $clubId, array $setup, string $phaseKey, array $lineupRows): void {
+        $this->db->beginTransaction();
+        try {
+            $this->saveTacticalSetup($clubId, $setup);
+            $this->saveLineup($clubId, $phaseKey, $lineupRows);
+            $this->db->commit();
+        } catch (Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            throw $e;
+        }
+    }
+
     public function saveLineup(int $clubId, string $phaseKey, array $lineup): void {
         $this->db->query(
             "UPDATE tactic_lineups SET is_active = 0 WHERE club_id = ? AND phase_key = ?",
@@ -278,22 +292,16 @@ class TacticModel extends BaseModel {
     }
 
     public function buildResponsibilityRankings(array $squad, array $lineupBoard): array {
-        $lineupPlayerIds = [];
-        foreach ($lineupBoard as $slot) {
-            $pid = (int)($slot['selected_player_id'] ?? 0);
-            if ($pid > 0) {
-                $lineupPlayerIds[$pid] = true;
-            }
-        }
+        $lineupPlayers = $this->extractLineupPlayers($squad, $lineupBoard);
 
         $roles = ['captain', 'penalty_taker', 'freekick_taker', 'corner_taker'];
         $result = [];
         foreach ($roles as $role) {
             $ranked = [];
-            foreach ($squad as $player) {
+            foreach ($lineupPlayers as $player) {
                 $pid = (int)($player['id'] ?? 0);
                 if ($pid <= 0) continue;
-                $score = $this->calculateResponsibilityScore($player, $role, isset($lineupPlayerIds[$pid]));
+                $score = $this->calculateResponsibilityScore($player, $role, true);
                 $name = trim((string)(($player['first_name'] ?? '') . ' ' . ($player['last_name'] ?? '')));
                 $ranked[] = [
                     'id' => $pid,
@@ -308,6 +316,47 @@ class TacticModel extends BaseModel {
         }
 
         return $result;
+    }
+
+    public function normalizeResponsibilitiesForLineup(array $tactic, array $lineupBoard): array {
+        $allowed = $this->extractLineupPlayerIds($lineupBoard);
+        foreach (['captain', 'penalty_taker', 'freekick_taker', 'corner_taker'] as $field) {
+            $pid = (int)($tactic[$field] ?? 0);
+            if ($pid > 0 && !isset($allowed[$pid])) {
+                $tactic[$field] = null;
+            }
+        }
+        return $tactic;
+    }
+
+    public function extractLineupPlayerIds(array $lineupBoard): array {
+        $lineupPlayerIds = [];
+        foreach ($lineupBoard as $slot) {
+            $pid = (int)($slot['selected_player_id'] ?? 0);
+            if ($pid > 0) {
+                $lineupPlayerIds[$pid] = true;
+            }
+        }
+        return $lineupPlayerIds;
+    }
+
+    private function extractLineupPlayers(array $squad, array $lineupBoard): array {
+        $byId = [];
+        foreach ($squad as $player) {
+            $pid = (int)($player['id'] ?? 0);
+            if ($pid > 0) {
+                $byId[$pid] = $player;
+            }
+        }
+
+        $lineup = [];
+        foreach ($this->extractLineupPlayerIds($lineupBoard) as $pid => $_) {
+            if (isset($byId[$pid])) {
+                $lineup[] = $byId[$pid];
+            }
+        }
+
+        return $lineup;
     }
 
     public function calculatePositionRating(array $player, string $slot): int {

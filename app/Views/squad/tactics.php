@@ -67,7 +67,9 @@
         <a class="btn" href="/squad/tactics">تاکتیک / ترکیب</a>
     </div>
 
-    <form method="POST" action="/squad/tactics/save" data-ajax>
+    <div id="tactics-save-status" style="display:none; margin-top:10px; padding:10px; border-radius:8px;"></div>
+
+    <form method="POST" action="/squad/tactics/save" id="tactics-form">
         <input type="hidden" name="phase_key" value="<?= htmlspecialchars((string)($phase_key ?? 'MATCH_1')) ?>">
         <div class="grid" style="margin-top:12px;">
             <div class="form-group">
@@ -168,6 +170,9 @@
                             </option>
                         <?php endforeach; ?>
                     </select>
+                    <?php if (empty($responsibility_rankings[$field] ?? [])): ?>
+                        <small style="color:#666;">ابتدا ترکیب ۱۱ نفره را ذخیره کنید تا گزینه‌های مسئولیت از ترکیب اصلی نمایش داده شوند.</small>
+                    <?php endif; ?>
                 </div>
             <?php endforeach; ?>
         </div>
@@ -188,6 +193,58 @@
         });
 
         const slotSelects = Array.from(document.querySelectorAll('.lineup-slot-select'));
+        const statusBox = document.getElementById('tactics-save-status');
+        const form = document.getElementById('tactics-form');
+        const setStatus = (type, text) => {
+            if (!statusBox) return;
+            statusBox.style.display = 'block';
+            statusBox.textContent = text || '';
+            if (type === 'success') {
+                statusBox.style.background = '#dcfce7';
+                statusBox.style.color = '#166534';
+                statusBox.style.border = '1px solid #86efac';
+                return;
+            }
+            statusBox.style.background = '#fee2e2';
+            statusBox.style.color = '#991b1b';
+            statusBox.style.border = '1px solid #fca5a5';
+        };
+
+        if (form) {
+            form.addEventListener('submit', async function (e) {
+                e.preventDefault();
+                const formData = new FormData(form);
+                try {
+                    const response = await fetch(form.action, {
+                        method: 'POST',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+                        },
+                        body: new URLSearchParams(formData).toString()
+                    });
+                    let result = null;
+                    try {
+                        result = await response.json();
+                    } catch (_) {
+                        setStatus('error', 'پاسخ نامعتبر از سرور دریافت شد. لطفاً دوباره تلاش کنید.');
+                        return;
+                    }
+                    if (!response.ok || (result && result.error)) {
+                        setStatus('error', (result && result.error) ? result.error : 'ذخیره انجام نشد. لطفاً دوباره تلاش کنید.');
+                        return;
+                    }
+
+                    setStatus('success', result.message || 'تاکتیک با موفقیت ذخیره شد.');
+                    if (result.reload) {
+                        setTimeout(() => window.location.reload(), 350);
+                    }
+                } catch (_) {
+                    setStatus('error', 'اتصال با سرور برقرار نشد. اتصال شبکه را بررسی کنید و دوباره تلاش کنید.');
+                }
+            });
+        }
+
         slotSelects.forEach(select => {
             select.addEventListener('change', function () {
                 const selectedPlayerId = this.value;
