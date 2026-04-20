@@ -4,7 +4,7 @@
 session_start();
 
 // Load configuration
-require_once __DIR__ . '/../config/config.php';
+$config = require __DIR__ . '/../config/config.php';
 
 // Autoload classes
 spl_autoload_register(function ($class) {
@@ -22,6 +22,18 @@ spl_autoload_register(function ($class) {
         }
     }
 });
+
+// Startup schema verification (migration-first safety)
+try {
+    (new SchemaSafetyVerifier(Database::getInstance()))->verifyOrFail();
+} catch (Throwable $e) {
+    http_response_code(503);
+    header('Content-Type: text/plain; charset=utf-8');
+    echo "Startup schema verification failed.\n";
+    echo $e->getMessage() . "\n";
+    echo "Apply required migrations or enable temporary compatibility fallback with RUNTIME_DDL_FALLBACK=1.\n";
+    exit;
+}
 
 // Initialize router
 $router = new Router();
@@ -45,8 +57,11 @@ $router->post('/club/facilities/downgrade', 'ClubFacilitiesController@downgrade'
 
 // Squad management
 $router->get('/squad', 'SquadController@index');
+$router->get('/squad/players', 'SquadController@index');
 $router->get('/squad/tactics', 'SquadController@tactics');
+$router->get('/squad/lineup', 'SquadController@tactics');
 $router->post('/squad/tactics/save', 'SquadController@saveTactic');
+$router->post('/squad/role/save', 'SquadController@saveSquadRole');
 $router->get('/squad/player/{id}', 'SquadController@playerDetail');
 
 // Matches
@@ -57,6 +72,7 @@ $router->get('/match/{id}', 'MatchController@detail');
 $router->get('/transfers', 'TransferController@market');
 $router->post('/transfer/listing', 'TransferController@setListed');
 $router->post('/transfer/bid', 'TransferController@makeBid');
+$router->post('/transfer/counter/{id}', 'TransferController@counterBid');
 $router->post('/transfer/accept/{id}', 'TransferController@acceptBid');
 $router->post('/transfer/reject/{id}', 'TransferController@rejectBid');
 
@@ -84,6 +100,7 @@ $router->post('/manager/applications/offer', 'ManagerHiringController@sendOffer'
 $router->post('/manager/offers/{id}/accept', 'ManagerHiringController@respondOfferAccept');
 $router->post('/manager/offers/{id}/reject', 'ManagerHiringController@respondOfferReject');
 $router->post('/manager/offers/{id}/counter', 'ManagerHiringController@respondOfferCounter');
+$router->post('/manager/contracts/terminate', 'ManagerHiringController@terminateContract');
 
 
 
@@ -106,6 +123,8 @@ $router->post('/governance/review/{id}/resolve', 'GovernanceController@resolve')
 
 // Admin
 $router->get('/admin', 'AdminController@index');
+$router->get('/admin/seed', 'AdminController@seedImportPage');
+$router->post('/admin/seed/import', 'AdminController@importSeed');
 $router->get('/admin/clubs/create', 'AdminController@createClubForm');
 $router->post('/admin/clubs/create', 'AdminController@storeClub');
 $router->get('/admin/players/create', 'AdminController@createPlayerForm');

@@ -1,0 +1,98 @@
+[
+  {
+    "club_external_key": "TEH_EAGLES",
+    "tier": "main",
+    "brand_name": "Tehran Energy",
+    "is_active": 1
+  },
+  {
+    "club_external_key": "TEH_EAGLES",
+    "tier": "minor",
+    "brand_name": "Tehran Mobile",
+    "is_active": 1
+  },
+  {
+    "club_external_key": "ISF_STEEL",
+    "tier": "main",
+    "brand_name": "Isfahan Energy",
+    "is_active": 1
+  },
+  {
+    "club_external_key": "ISF_STEEL",
+    "tier": "minor",
+    "brand_name": "Isfahan Mobile",
+    "is_active": 1
+  },
+  {
+    "club_external_key": "TAB_TIGERS",
+    "tier": "secondary",
+    "brand_name": "Tabriz Energy",
+    "is_active": 1
+  },
+  {
+    "club_external_key": "TAB_TIGERS",
+    "tier": "minor",
+    "brand_name": "Tabriz Mobile",
+    "is_active": 1
+  },
+  {
+    "club_external_key": "SHR_WAVES",
+    "tier": "secondary",
+    "brand_name": "Shiraz Energy",
+    "is_active": 1
+  },
+  {
+    "club_external_key": "SHR_WAVES",
+    "tier": "minor",
+    "brand_name": "Shiraz Mobile",
+    "is_active": 1
+  },
+  {
+    "club_external_key": "MHD_FALCONS",
+    "tier": "secondary",
+    "brand_name": "Mashhad Energy",
+    "is_active": 1
+  },
+  {
+    "club_external_key": "MHD_FALCONS",
+    "tier": "minor",
+    "brand_name": "Mashhad Mobile",
+    "is_active": 1
+  },
+  {
+    "club_external_key": "QAZ_LIONS",
+    "tier": "secondary",
+    "brand_name": "Qazvin Energy",
+    "is_active": 1
+  },
+  {
+    "club_external_key": "QAZ_LIONS",
+    "tier": "minor",
+    "brand_name": "Qazvin Mobile",
+    "is_active": 1
+  },
+  {
+    "club_external_key": "AHV_OILERS",
+    "tier": "secondary",
+    "brand_name": "Ahvaz Energy",
+    "is_active": 1
+  },
+  {
+    "club_external_key": "AHV_OILERS",
+    "tier": "minor",
+    "brand_name": "Ahvaz Mobile",
+    "is_active": 1
+  },
+  {
+    "club_external_key": "KRM_COPPER",
+    "tier": "secondary",
+    "brand_name": "Kerman Energy",
+    "is_active": 1
+  },
+  {
+    "club_external_key": "KRM_COPPER",
+    "tier": "minor",
+    "brand_name": "Kerman Mobile",
+    "is_active": 1
+  }
+]

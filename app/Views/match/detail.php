@@ -9,7 +9,7 @@
             </div>
 
             <div style="font-size:48px; font-weight:bold; color:#2c3e50;">
-                <?= $match['home_goals'] ?> - <?= $match['away_goals'] ?>
+                <?= $match['home_score'] ?? '-' ?> - <?= $match['away_score'] ?? '-' ?>
             </div>
 
             <div style="font-size:20px; font-weight:bold;">
@@ -48,7 +48,7 @@
                             'PENALTY'     => '🎯',
                             'OWN_GOAL'    => '😬',
                         ];
-                        echo $icons[$e['event_type']] ?? '📌';
+                        echo $icons[$e['type']] ?? '📌';
                         ?>
                     </span>
 

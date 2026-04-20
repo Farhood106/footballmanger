@@ -1,0 +1,15 @@
+[
+  {
+    "external_key": "PERSEPOLIS",
+    "name": "Persepolis",
+    "short_name": "PER",
+    "country": "Iran",
+    "city": "Tehran",
+    "founded": 1963,
+    "reputation": 85,
+    "balance": 50000000,
+    "stadium_name": "Azadi",
+    "stadium_capacity": 78000,
+    "competition_external_key": "IRN_PREMIER"
+  }
+]

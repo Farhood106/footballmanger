@@ -1,0 +1,24 @@
+[
+  {
+    "external_key": "IRN_PREM_V1",
+    "name": "Iran Premier Mini",
+    "type": "LEAGUE",
+    "country": "Iran",
+    "level": 1,
+    "teams_count": 4,
+    "promotion_slots": 0,
+    "relegation_slots": 1,
+    "parent_external_key": null
+  },
+  {
+    "external_key": "IRN_DIV1_V1",
+    "name": "Iran Division One Mini",
+    "type": "LEAGUE",
+    "country": "Iran",
+    "level": 2,
+    "teams_count": 4,
+    "promotion_slots": 1,
+    "relegation_slots": 0,
+    "parent_external_key": "IRN_PREM_V1"
+  }
+]

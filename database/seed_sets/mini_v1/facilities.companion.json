@@ -1,0 +1,162 @@
+[
+  {
+    "club_external_key": "TEH_EAGLES",
+    "facility_type": "stadium",
+    "level": 2
+  },
+  {
+    "club_external_key": "TEH_EAGLES",
+    "facility_type": "training_ground",
+    "level": 2
+  },
+  {
+    "club_external_key": "TEH_EAGLES",
+    "facility_type": "youth_academy",
+    "level": 3
+  },
+  {
+    "club_external_key": "TEH_EAGLES",
+    "facility_type": "headquarters",
+    "level": 2
+  },
+  {
+    "club_external_key": "ISF_STEEL",
+    "facility_type": "stadium",
+    "level": 2
+  },
+  {
+    "club_external_key": "ISF_STEEL",
+    "facility_type": "training_ground",
+    "level": 2
+  },
+  {
+    "club_external_key": "ISF_STEEL",
+    "facility_type": "youth_academy",
+    "level": 3
+  },
+  {
+    "club_external_key": "ISF_STEEL",
+    "facility_type": "headquarters",
+    "level": 2
+  },
+  {
+    "club_external_key": "TAB_TIGERS",
+    "facility_type": "stadium",
+    "level": 2
+  },
+  {
+    "club_external_key": "TAB_TIGERS",
+    "facility_type": "training_ground",
+    "level": 2
+  },
+  {
+    "club_external_key": "TAB_TIGERS",
+    "facility_type": "youth_academy",
+    "level": 2
+  },
+  {
+    "club_external_key": "TAB_TIGERS",
+    "facility_type": "headquarters",
+    "level": 2
+  },
+  {
+    "club_external_key": "SHR_WAVES",
+    "facility_type": "stadium",
+    "level": 2
+  },
+  {
+    "club_external_key": "SHR_WAVES",
+    "facility_type": "training_ground",
+    "level": 1
+  },
+  {
+    "club_external_key": "SHR_WAVES",
+    "facility_type": "youth_academy",
+    "level": 2
+  },
+  {
+    "club_external_key": "SHR_WAVES",
+    "facility_type": "headquarters",
+    "level": 2
+  },
+  {
+    "club_external_key": "MHD_FALCONS",
+    "facility_type": "stadium",
+    "level": 1
+  },
+  {
+    "club_external_key": "MHD_FALCONS",
+    "facility_type": "training_ground",
+    "level": 1
+  },
+  {
+    "club_external_key": "MHD_FALCONS",
+    "facility_type": "youth_academy",
+    "level": 2
+  },
+  {
+    "club_external_key": "MHD_FALCONS",
+    "facility_type": "headquarters",
+    "level": 1
+  },
+  {
+    "club_external_key": "QAZ_LIONS",
+    "facility_type": "stadium",
+    "level": 1
+  },
+  {
+    "club_external_key": "QAZ_LIONS",
+    "facility_type": "training_ground",
+    "level": 1
+  },
+  {
+    "club_external_key": "QAZ_LIONS",
+    "facility_type": "youth_academy",
+    "level": 1
+  },
+  {
+    "club_external_key": "QAZ_LIONS",
+    "facility_type": "headquarters",
+    "level": 1
+  },
+  {
+    "club_external_key": "AHV_OILERS",
+    "facility_type": "stadium",
+    "level": 1
+  },
+  {
+    "club_external_key": "AHV_OILERS",
+    "facility_type": "training_ground",
+    "level": 1
+  },
+  {
+    "club_external_key": "AHV_OILERS",
+    "facility_type": "youth_academy",
+    "level": 1
+  },
+  {
+    "club_external_key": "AHV_OILERS",
+    "facility_type": "headquarters",
+    "level": 1
+  },
+  {
+    "club_external_key": "KRM_COPPER",
+    "facility_type": "stadium",
+    "level": 1
+  },
+  {
+    "club_external_key": "KRM_COPPER",
+    "facility_type": "training_ground",
+    "level": 1
+  },
+  {
+    "club_external_key": "KRM_COPPER",
+    "facility_type": "youth_academy",
+    "level": 1
+  },
+  {
+    "club_external_key": "KRM_COPPER",
+    "facility_type": "headquarters",
+    "level": 1
+  }
+]

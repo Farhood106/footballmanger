@@ -18,13 +18,16 @@ class FinanceService {
         'FACILITY_UPGRADE',
         'FACILITY_DOWNGRADE_REFUND',
         'FACILITY_MAINTENANCE',
+        'MANAGER_TERMINATION_COMPENSATION',
         // backward compatibility:
         'WAGE', 'STAFF_WAGE', 'PENALTY', 'PRIZE', 'OTHER', 'SPONSOR', 'TICKET'
     ];
 
     public function __construct(?Database $db = null) {
         $this->db = $db ?? Database::getInstance();
-        $this->ensureFinanceTables();
+        if ($this->db->shouldRunRuntimeDdlFallback()) {
+            $this->ensureFinanceTables();
+        }
     }
 
     public function postEntry(
@@ -244,12 +247,12 @@ class FinanceService {
 
         $this->db->execute(
             "ALTER TABLE club_finance_ledger
-             MODIFY COLUMN entry_type ENUM(
-                'COACH_SALARY','MATCH_REWARD','SEASON_REWARD','GOVERNANCE_PENALTY','GOVERNANCE_COMPENSATION',
-                'TRANSFER_IN','TRANSFER_OUT','OWNER_FUNDING','SPONSOR_INCOME','MANUAL_ADMIN_ADJUSTMENT',
-                'FACILITY_UPGRADE','FACILITY_DOWNGRADE_REFUND','FACILITY_MAINTENANCE',
-                'WAGE','STAFF_WAGE','PENALTY','PRIZE','OTHER','SPONSOR','TICKET'
-             ) NOT NULL"
+                 MODIFY COLUMN entry_type ENUM(
+                    'COACH_SALARY','MATCH_REWARD','SEASON_REWARD','GOVERNANCE_PENALTY','GOVERNANCE_COMPENSATION',
+                    'TRANSFER_IN','TRANSFER_OUT','OWNER_FUNDING','SPONSOR_INCOME','MANUAL_ADMIN_ADJUSTMENT',
+                    'FACILITY_UPGRADE','FACILITY_DOWNGRADE_REFUND','FACILITY_MAINTENANCE','MANAGER_TERMINATION_COMPENSATION',
+                    'WAGE','STAFF_WAGE','PENALTY','PRIZE','OTHER','SPONSOR','TICKET'
+                 ) NOT NULL"
         );
     }
 }

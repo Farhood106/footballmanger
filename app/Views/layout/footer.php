@@ -1,25 +1,19 @@
     </div>
     <script>
-        // AJAX helper
-        async function apiCall(url, method = 'GET', data = null) {
-            const options = {
-                method,
-                headers: { 'Content-Type': 'application/json' }
-            };
-            if (data && method !== 'GET') {
-                options.body = JSON.stringify(data);
-            }
-            const response = await fetch(url, options);
-            return response.json();
-        }
-
         // Form submission helper
         document.querySelectorAll('form[data-ajax]').forEach(form => {
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const formData = new FormData(form);
-                const data = Object.fromEntries(formData);
-                const result = await apiCall(form.action, form.method, data);
+                const method = (form.method || 'POST').toUpperCase();
+                const result = await fetch(form.action, {
+                    method,
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+                    },
+                    body: method === 'GET' ? undefined : new URLSearchParams(formData).toString()
+                }).then(r => r.json());
                 
                 if (result.error) {
                     alert(result.error);

@@ -56,7 +56,18 @@ class MatchModel extends BaseModel {
     }
 
     public function getWithEvents(int $matchId): ?array {
-        $match = $this->find($matchId);
+        $match = $this->db->fetchOne(
+            "SELECT m.*, hc.name AS home_club_name, ac.name AS away_club_name,
+                    comp.name AS competition_name,
+                    DATE_FORMAT(m.scheduled_at, '%Y-%m-%d %H:%i') AS match_date
+             FROM matches m
+             JOIN clubs hc ON m.home_club_id = hc.id
+             JOIN clubs ac ON m.away_club_id = ac.id
+             LEFT JOIN seasons s ON s.id = m.season_id
+             LEFT JOIN competitions comp ON comp.id = s.competition_id
+             WHERE m.id = ?",
+            [$matchId]
+        );
         if (!$match) return null;
 
         $match['events'] = $this->db->fetchAll(
@@ -71,7 +82,7 @@ class MatchModel extends BaseModel {
         );
 
         $match['ratings'] = $this->db->fetchAll(
-            "SELECT pmr.*, CONCAT(p.first_name, ' ', p.last_name) AS player_name, p.position
+            "SELECT pmr.*, CONCAT(p.first_name, ' ', p.last_name) AS player_name, p.position, p.club_id
              FROM player_match_ratings pmr
              JOIN players p ON pmr.player_id = p.id
              WHERE pmr.match_id = ?

@@ -121,6 +121,37 @@ $ownerCommitments = trim((string)($exp['commitments'] ?? ''));
 </div>
 
 <div class="card">
+    <h2>Active Contract Lifecycle</h2>
+    <table class="table">
+        <thead><tr><th>Club</th><th>Salary</th><th>End date</th><th>Status</th><th>Action</th></tr></thead>
+        <tbody>
+        <?php foreach (($active_contracts ?? []) as $contract): ?>
+            <tr>
+                <td><?= htmlspecialchars((string)($contract['club_name'] ?? '-')) ?></td>
+                <td><?= number_format((int)($contract['salary'] ?? 0)) ?></td>
+                <td><?= htmlspecialchars((string)($contract['end_date'] ?? '-')) ?></td>
+                <td><?= htmlspecialchars((string)($contract['status'] ?? 'ACTIVE')) ?></td>
+                <td style="min-width:280px;">
+                    <?php if ((int)($contract['coach_user_id'] ?? 0) === (int)\Auth::id()): ?>
+                        <form method="post" action="/manager/contracts/terminate">
+                            <input type="hidden" name="club_id" value="<?= (int)$contract['club_id'] ?>">
+                            <input type="hidden" name="termination_type" value="MUTUAL_TERMINATION">
+                            <input type="number" min="0" name="compensation_amount" placeholder="Mutual compensation" style="width:160px;">
+                            <textarea name="termination_reason" rows="2" placeholder="Mutual termination reason"></textarea>
+                            <button class="btn btn-danger" type="submit">Request Mutual Termination</button>
+                        </form>
+                    <?php else: ?>
+                        -
+                    <?php endif; ?>
+                </td>
+            </tr>
+        <?php endforeach; ?>
+        <?php if (empty($active_contracts)): ?><tr><td colspan="5">No active contract assigned.</td></tr><?php endif; ?>
+        </tbody>
+    </table>
+</div>
+
+<div class="card">
     <h2>My Manager Applications</h2>
     <?php if (empty($history)): ?>
         <p>شما هنوز درخواست مربیگری ثبت نکرده‌اید.</p>

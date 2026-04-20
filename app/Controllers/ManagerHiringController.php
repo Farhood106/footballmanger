@@ -77,11 +77,13 @@ class ManagerHiringController extends Controller {
 
         $history = $this->applicationModel->getByCoach((int)Auth::id());
         $offers = $this->applicationModel->getOffersForCoach((int)Auth::id());
+        $activeContracts = $this->applicationModel->getActiveContractsForActor((int)Auth::id(), Auth::isAdmin());
 
         $this->view('manager/apply', [
             'clubs' => $clubs,
             'history' => $history,
-            'offers' => $offers
+            'offers' => $offers,
+            'active_contracts' => $activeContracts
         ]);
     }
 
@@ -139,7 +141,59 @@ class ManagerHiringController extends Controller {
 
         $pending = $this->applicationModel->getPendingForReviewer((int)Auth::id(), Auth::isAdmin());
         $offers = $this->applicationModel->getOffersForReviewer((int)Auth::id(), Auth::isAdmin());
-        $this->view('manager/manage-applications', ['pending' => $pending, 'offers' => $offers]);
+        $activeContracts = $this->applicationModel->getActiveContractsForActor((int)Auth::id(), Auth::isAdmin());
+        $this->view('manager/manage-applications', ['pending' => $pending, 'offers' => $offers, 'active_contracts' => $activeContracts]);
+    }
+
+    public function terminateContract(): void {
+        $this->requireAuth();
+
+        $clubId = (int)($_POST['club_id'] ?? 0);
+        $terminationType = (string)($_POST['termination_type'] ?? 'OWNER_TERMINATION');
+        $compensation = isset($_POST['compensation_amount']) ? (int)$_POST['compensation_amount'] : null;
+        $reason = trim((string)($_POST['termination_reason'] ?? ''));
+        $openGovernance = ((int)($_POST['open_governance_case'] ?? 0) === 1);
+
+        $result = $this->applicationModel->terminateActiveContract(
+            $clubId,
+            (int)Auth::id(),
+            Auth::isAdmin(),
+            $terminationType,
+            $compensation,
+            $reason,
+            $openGovernance
+        );
+
+        $stateNote = null;
+        if (!empty($result['ok'])) {
+            $ai = new AIClubManagementService();
+            $state = $ai->getClubControlState($clubId);
+            $stateNote = !empty($state['manager_vacant']) ? 'Vacancy/caretaker state updated.' : 'Manager state updated.';
+        }
+
+        if (Auth::gameRole() === 'COACH' && !Auth::isAdmin()) {
+            $clubs = $this->clubModel->getUnmanaged();
+            foreach ($clubs as &$club) {
+                $club['expectation'] = $this->applicationModel->getExpectationByClub((int)$club['id']);
+            }
+            $this->view('manager/apply', [
+                'clubs' => $clubs,
+                'history' => $this->applicationModel->getByCoach((int)Auth::id()),
+                'offers' => $this->applicationModel->getOffersForCoach((int)Auth::id()),
+                'active_contracts' => $this->applicationModel->getActiveContractsForActor((int)Auth::id(), Auth::isAdmin()),
+                'success' => !empty($result['ok']) ? ('قرارداد خاتمه یافت. ' . ($stateNote ?? '')) : null,
+                'error' => !empty($result['ok']) ? null : ($result['error'] ?? 'امکان خاتمه قرارداد وجود ندارد.')
+            ]);
+            return;
+        }
+
+        $this->view('manager/manage-applications', [
+            'pending' => $this->applicationModel->getPendingForReviewer((int)Auth::id(), Auth::isAdmin()),
+            'offers' => $this->applicationModel->getOffersForReviewer((int)Auth::id(), Auth::isAdmin()),
+            'active_contracts' => $this->applicationModel->getActiveContractsForActor((int)Auth::id(), Auth::isAdmin()),
+            'success' => !empty($result['ok']) ? ('قرارداد خاتمه یافت. ' . ($stateNote ?? '')) : null,
+            'error' => !empty($result['ok']) ? null : ($result['error'] ?? 'امکان خاتمه قرارداد وجود ندارد.')
+        ]);
     }
 
     public function approveApplication(): void {
@@ -214,6 +268,7 @@ class ManagerHiringController extends Controller {
             'clubs' => $clubs,
             'history' => $this->applicationModel->getByCoach((int)Auth::id()),
             'offers' => $this->applicationModel->getOffersForCoach((int)Auth::id()),
+            'active_contracts' => $this->applicationModel->getActiveContractsForActor((int)Auth::id(), Auth::isAdmin()),
             'success' => !empty($result['ok']) ? 'پاسخ به پیشنهاد ثبت شد.' : null,
             'error' => !empty($result['ok']) ? null : ($result['error'] ?? 'امکان انجام این عملیات وجود ندارد.')
         ]);
@@ -223,6 +278,7 @@ class ManagerHiringController extends Controller {
         $this->view('manager/manage-applications', [
             'pending' => $this->applicationModel->getPendingForReviewer((int)Auth::id(), Auth::isAdmin()),
             'offers' => $this->applicationModel->getOffersForReviewer((int)Auth::id(), Auth::isAdmin()),
+            'active_contracts' => $this->applicationModel->getActiveContractsForActor((int)Auth::id(), Auth::isAdmin()),
             'success' => !empty($result['ok']) ? 'عملیات انجام شد.' : null,
             'error' => !empty($result['ok']) ? null : ($result['error'] ?? 'امکان انجام این عملیات وجود ندارد.')
         ]);
@@ -242,6 +298,7 @@ class ManagerHiringController extends Controller {
             $this->view('manager/manage-applications', [
                 'pending' => $this->applicationModel->getPendingForReviewer((int)Auth::id(), Auth::isAdmin()),
                 'offers' => $this->applicationModel->getOffersForReviewer((int)Auth::id(), Auth::isAdmin()),
+                'active_contracts' => $this->applicationModel->getActiveContractsForActor((int)Auth::id(), Auth::isAdmin()),
                 'error' => 'وارد کردن دلیل رد درخواست الزامی است.'
             ]);
             return;
@@ -254,6 +311,7 @@ class ManagerHiringController extends Controller {
         $this->view('manager/manage-applications', [
             'pending' => $this->applicationModel->getPendingForReviewer((int)Auth::id(), Auth::isAdmin()),
             'offers' => $this->applicationModel->getOffersForReviewer((int)Auth::id(), Auth::isAdmin()),
+            'active_contracts' => $this->applicationModel->getActiveContractsForActor((int)Auth::id(), Auth::isAdmin()),
             'success' => $ok ? 'عملیات انجام شد.' : null,
             'error' => $ok ? null : 'امکان انجام این عملیات وجود ندارد.'
         ]);

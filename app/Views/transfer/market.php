@@ -39,15 +39,29 @@
                 <th>پست</th>
                 <th>قدرت</th>
                 <th>ارزش/قیمت</th>
+                <th>تمایل انتقال</th>
                 <th>خرید</th>
             </tr>
 
             <?php foreach ($players as $p): ?>
+            <?php $ctx = $player_contexts[(int)$p['id']] ?? []; ?>
+            <?php $pricing = $ctx['pricing'] ?? null; ?>
+            <?php $disp = $ctx['disposition'] ?? null; ?>
             <tr>
                 <td><?= htmlspecialchars($p['full_name'] ?? '') ?></td>
                 <td><?= htmlspecialchars($p['position']) ?></td>
                 <td><?= $p['overall'] ?></td>
                 <td><?= number_format((int)($p['market_value'] ?? 0)) ?> $ / <?= number_format((int)($p['asking_price'] ?? 0)) ?> $</td>
+                <td>
+                    <?php if ($disp): ?>
+                        <?= htmlspecialchars((string)($disp['label'] ?? 'Neutral')) ?> (<?= (int)($disp['willingness_score'] ?? 50) ?>)
+                    <?php else: ?>
+                        -
+                    <?php endif; ?>
+                    <?php if ($pricing): ?>
+                        <br><small>حداقل: <?= number_format((int)$pricing['min_accept']) ?>$</small>
+                    <?php endif; ?>
+                </td>
                 <td>
                     <form method="POST" action="/transfer/bid" data-ajax>
                         <input type="hidden" name="player_id" value="<?= $p['id'] ?>">
@@ -69,19 +83,60 @@
             <tr>
                 <td><?= htmlspecialchars((string)$o['player_name']) ?></td>
                 <td><?= htmlspecialchars((string)($o['to_club_name'] ?? '-')) ?></td>
-                <td><?= number_format((int)$o['fee']) ?> $</td>
+                <td>
+                    <?= number_format((int)$o['fee']) ?> $
+                    <?php if (($o['status'] ?? '') === 'COUNTERED' && (int)($o['counter_fee'] ?? 0) > 0): ?>
+                        <br><small>کانتر: <?= number_format((int)$o['counter_fee']) ?> $</small>
+                    <?php endif; ?>
+                </td>
                 <td><?= htmlspecialchars((string)$o['status']) ?></td>
                 <td>
-                    <form method="POST" action="/transfer/accept/<?= (int)$o['id'] ?>" data-ajax style="display:inline-block;">
-                        <button class="btn btn-success">قبول</button>
-                    </form>
-                    <form method="POST" action="/transfer/reject/<?= (int)$o['id'] ?>" data-ajax style="display:inline-block;">
-                        <button class="btn">رد</button>
-                    </form>
+                    <?php if (($o['status'] ?? '') === 'PENDING'): ?>
+                        <form method="POST" action="/transfer/accept/<?= (int)$o['id'] ?>" data-ajax style="display:inline-block;">
+                            <button class="btn btn-success">قبول</button>
+                        </form>
+                        <form method="POST" action="/transfer/reject/<?= (int)$o['id'] ?>" data-ajax style="display:inline-block;">
+                            <button class="btn">رد</button>
+                        </form>
+                        <form method="POST" action="/transfer/counter/<?= (int)$o['id'] ?>" data-ajax style="display:inline-block;">
+                            <input type="number" name="counter_fee" value="<?= max((int)($o['fee'] ?? 0), (int)($o['asking_price'] ?? 1)) ?>" style="width:115px;">
+                            <button class="btn">کانتر</button>
+                        </form>
+                    <?php else: ?>
+                        <small>در انتظار پاسخ خریدار</small>
+                    <?php endif; ?>
                 </td>
             </tr>
         <?php endforeach; ?>
         <?php if (empty($incoming_offers)): ?><tr><td colspan="5">پیشنهاد فعالی وجود ندارد.</td></tr><?php endif; ?>
+    </table>
+</div>
+
+<div class="card">
+    <h2>مذاکرات من</h2>
+    <table class="table">
+        <tr><th>بازیکن</th><th>جهت</th><th>مبلغ نهایی</th><th>وضعیت</th><th>اقدام</th></tr>
+        <?php foreach (($transfers ?? []) as $t): ?>
+            <tr>
+                <td><?= htmlspecialchars((string)($t['player_name'] ?? '-')) ?></td>
+                <td><?= ((int)($t['to_club_id'] ?? 0) === (int)($club_id ?? 0)) ? 'خرید' : 'فروش' ?></td>
+                <td><?= number_format((int)($t['counter_fee'] ?? $t['fee'] ?? 0)) ?> $</td>
+                <td><?= htmlspecialchars((string)($t['status'] ?? '')) ?></td>
+                <td>
+                    <?php if (((int)($t['to_club_id'] ?? 0) === (int)($club_id ?? 0)) && (($t['status'] ?? '') === 'COUNTERED')): ?>
+                        <form method="POST" action="/transfer/accept/<?= (int)$t['id'] ?>" data-ajax style="display:inline-block;">
+                            <button class="btn btn-success">قبول کانتر</button>
+                        </form>
+                        <form method="POST" action="/transfer/reject/<?= (int)$t['id'] ?>" data-ajax style="display:inline-block;">
+                            <button class="btn">رد کانتر</button>
+                        </form>
+                    <?php else: ?>
+                        <small>-</small>
+                    <?php endif; ?>
+                </td>
+            </tr>
+        <?php endforeach; ?>
+        <?php if (empty($transfers)): ?><tr><td colspan="5">رکوردی وجود ندارد.</td></tr><?php endif; ?>
     </table>
 </div>
 

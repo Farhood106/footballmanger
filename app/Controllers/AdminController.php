@@ -24,6 +24,70 @@ class AdminController extends Controller {
         $this->view('admin/index', ['stats' => $stats]);
     }
 
+    public function seedImportPage(): void {
+        $this->requireAuth();
+        $this->requireAdmin();
+
+        $report = $_SESSION['admin_seed_import_report'] ?? null;
+        unset($_SESSION['admin_seed_import_report']);
+
+        $this->view('admin/seed-import', [
+            'seed_sets' => $this->listAvailableSeedSets(),
+            'import_report' => $report,
+        ]);
+    }
+
+    public function importSeed(): void {
+        $this->requireAuth();
+        $this->requireAdmin();
+
+        $dataset = trim((string)($_POST['dataset'] ?? ''));
+        $dryRun = in_array(strtolower((string)($_POST['dry_run'] ?? '0')), ['1', 'true', 'yes', 'on'], true);
+
+        $resolved = $this->resolveSeedSetDirectory($dataset);
+        if (!$resolved['ok']) {
+            $payload = ['ok' => false, 'error' => $resolved['error'] ?? 'Invalid dataset'];
+            if ($this->wantsJson()) {
+                $this->json($payload, 422);
+            }
+            $_SESSION['admin_seed_import_report'] = $payload;
+            $this->redirect('/admin/seed');
+        }
+
+        try {
+            require_once dirname(__DIR__, 2) . '/database/seeds/StructuredSeedImporter.php';
+            ignore_user_abort(true);
+            @set_time_limit(120);
+
+            $importer = new StructuredSeedImporter($this->buildSeedImportPdo(), $dryRun);
+            $report = $importer->importFromDirectory((string)$resolved['path']);
+            $response = [
+                'ok' => !empty($report['ok']),
+                'dataset' => $dataset,
+                'dry_run' => $dryRun,
+                'report' => $report,
+            ];
+
+            if ($this->wantsJson()) {
+                $this->json($response, !empty($report['ok']) ? 200 : 422);
+            }
+            $_SESSION['admin_seed_import_report'] = $response;
+            $this->redirect('/admin/seed');
+        } catch (Throwable $e) {
+            $payload = [
+                'ok' => false,
+                'dataset' => $dataset,
+                'dry_run' => $dryRun,
+                'error' => 'Seed import failed: ' . $e->getMessage(),
+            ];
+            if ($this->wantsJson()) {
+                $this->json($payload, 500);
+            }
+            $_SESSION['admin_seed_import_report'] = $payload;
+            $this->redirect('/admin/seed');
+        }
+    }
+
     public function createClubForm(): void {
         $this->requireAuth();
         $this->requireAdmin();
@@ -223,5 +287,84 @@ class AdminController extends Controller {
         } catch (Throwable $e) {
             // اگر دسترسی ALTER یا تغییر charset ممکن نبود، ادامه می‌دهیم
         }
+    }
+
+    private function seedSetsBaseDir(): string {
+        return dirname(__DIR__, 2) . '/database/seed_sets';
+    }
+
+    private function listAvailableSeedSets(): array {
+        $base = $this->seedSetsBaseDir();
+        if (!is_dir($base)) {
+            return [];
+        }
+
+        $items = [];
+        foreach (scandir($base) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+            $dir = $base . '/' . $entry;
+            if (!is_dir($dir)) {
+                continue;
+            }
+            if (!preg_match('/^[a-zA-Z0-9_.-]+$/', $entry)) {
+                continue;
+            }
+            $required = ['competitions.json', 'clubs.json', 'players.json'];
+            $missing = [];
+            foreach ($required as $file) {
+                if (!is_file($dir . '/' . $file)) {
+                    $missing[] = $file;
+                }
+            }
+            $items[] = [
+                'key' => $entry,
+                'path' => $dir,
+                'is_valid' => empty($missing),
+                'missing' => $missing,
+            ];
+        }
+
+        usort($items, fn($a, $b) => strcmp((string)$a['key'], (string)$b['key']));
+        return $items;
+    }
+
+    private function resolveSeedSetDirectory(string $dataset): array {
+        if ($dataset === '' || !preg_match('/^[a-zA-Z0-9_.-]+$/', $dataset) || str_contains($dataset, '..')) {
+            return ['ok' => false, 'error' => 'Dataset key is invalid.'];
+        }
+
+        $allowed = array_column($this->listAvailableSeedSets(), null, 'key');
+        if (!isset($allowed[$dataset])) {
+            return ['ok' => false, 'error' => 'Dataset is not in allowed seed set list.'];
+        }
+        if (empty($allowed[$dataset]['is_valid'])) {
+            return ['ok' => false, 'error' => 'Dataset is missing required JSON files.'];
+        }
+
+        $resolved = realpath((string)$allowed[$dataset]['path']);
+        $base = realpath($this->seedSetsBaseDir());
+        if ($resolved === false || $base === false || !str_starts_with($resolved, $base)) {
+            return ['ok' => false, 'error' => 'Dataset path is outside allowed base directory.'];
+        }
+        return ['ok' => true, 'path' => $resolved];
+    }
+
+    private function buildSeedImportPdo(): PDO {
+        $config = require dirname(__DIR__, 2) . '/config/config.php';
+        $db = $config['db'];
+        $dsn = "mysql:host={$db['host']};dbname={$db['name']};charset={$db['charset']}";
+        return new PDO($dsn, $db['user'], $db['pass'], [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES => false,
+        ]);
+    }
+
+    private function wantsJson(): bool {
+        $accept = strtolower((string)($_SERVER['HTTP_ACCEPT'] ?? ''));
+        $requestedWith = strtolower((string)($_SERVER['HTTP_X_REQUESTED_WITH'] ?? ''));
+        return str_contains($accept, 'application/json') || $requestedWith === 'xmlhttprequest' || (string)($_POST['response'] ?? '') === 'json';
     }
 }

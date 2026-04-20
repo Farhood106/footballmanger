@@ -44,7 +44,8 @@
             <h1>⚽ مدیریت باشگاه</h1>
             <nav class="nav">
                 <a href="/dashboard">داشبورد</a>
-                <a href="/squad">ترکیب</a>
+                <a href="/squad">اسکواد / بازیکنان</a>
+                <a href="/squad/tactics">تاکتیک / ترکیب</a>
                 <a href="/matches">بازی‌ها</a>
                 <a href="/transfers">نقل و انتقالات</a>
                 <a href="/competition/1/standings">جدول</a>
