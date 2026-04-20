@@ -10,6 +10,7 @@ $needles = [
     [$controller, "isset(\$lineupPlayerIds[\$freekickTaker])"],
     [$controller, "isset(\$lineupPlayerIds[\$cornerTaker])"],
     [$controller, 'saveSetupAndLineup'],
+    [$controller, 'responsibility_player_pool'],
     [$model, 'extractLineupPlayers'],
     [$model, 'normalizeResponsibilitiesForLineup'],
 ];

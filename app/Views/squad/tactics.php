@@ -152,7 +152,7 @@
             <?php foreach ($roles as $field => $label): ?>
                 <div class="form-group">
                     <label><?= htmlspecialchars($label) ?></label>
-                    <select name="<?= htmlspecialchars($field) ?>">
+                    <select class="responsibility-select" data-field="<?= htmlspecialchars($field) ?>" name="<?= htmlspecialchars($field) ?>">
                         <option value="">-- بدون انتخاب --</option>
                         <?php foreach (($responsibility_rankings[$field] ?? []) as $idx => $opt): ?>
                             <?php $best = $idx === 0 ? '⭐ ' : ''; ?>
@@ -167,6 +167,9 @@
                 </div>
             <?php endforeach; ?>
         </div>
+        <small id="responsibility-hint" style="display:block; margin-top:6px; color:#666;">
+            مسئولیت‌ها بر اساس ۱۱ بازیکن انتخاب‌شده فعلی در ترکیب اصلی تنظیم می‌شوند.
+        </small>
 
         <button type="submit" class="btn btn-success" style="margin-top: 15px;">ذخیره تاکتیک</button>
     </form>
@@ -174,6 +177,9 @@
 
 <script>
     (function () {
+        const responsibilityPlayerPool = <?= json_encode($responsibility_player_pool ?? [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+        const playerById = new Map((responsibilityPlayerPool || []).map(p => [String(p.id), p]));
+        const roleFields = ['captain', 'penalty_taker', 'freekick_taker', 'corner_taker'];
         const formationSelect = document.getElementById('formation-select');
         if (!formationSelect) return;
         formationSelect.addEventListener('change', function () {
@@ -184,6 +190,8 @@
         });
 
         const slotSelects = Array.from(document.querySelectorAll('.lineup-slot-select'));
+        const roleSelects = Array.from(document.querySelectorAll('.responsibility-select'));
+        const roleHint = document.getElementById('responsibility-hint');
         const statusBox = document.getElementById('tactics-save-status');
         const form = document.getElementById('tactics-form');
         const setStatus = (type, text) => {
@@ -199,6 +207,71 @@
             statusBox.style.background = '#fee2e2';
             statusBox.style.color = '#991b1b';
             statusBox.style.border = '1px solid #fca5a5';
+        };
+        const calcScore = (player, role) => {
+            const overall = Number(player.overall || 0);
+            const shooting = Number(player.shooting || 0);
+            const passing = Number(player.passing || 0);
+            const dribbling = Number(player.dribbling || 0);
+            const pace = Number(player.pace || 0);
+            const physical = Number(player.physical || 0);
+            const morale = Number(player.morale || 6.5);
+            const roleCode = String(player.squad_role || 'ROTATION').toUpperCase();
+            const position = String(player.position || '').toUpperCase();
+            const stabilityBonus = roleCode === 'KEY_PLAYER' ? 4 : (roleCode === 'REGULAR_STARTER' ? 2 : (roleCode === 'ROTATION' ? 1 : 0));
+            const lineupBonus = 5.0;
+            if (role === 'captain') return (overall * 0.45) + (morale * 6.0) + (physical * 0.18) + lineupBonus + stabilityBonus;
+            if (role === 'penalty_taker') return (shooting * 0.60) + (overall * 0.20) + (morale * 2.5) + (physical * 0.10) + lineupBonus;
+            if (role === 'freekick_taker') return (passing * 0.45) + (shooting * 0.25) + (dribbling * 0.15) + (overall * 0.15) + lineupBonus;
+            if (role === 'corner_taker') {
+                const wideBonus = ['LM', 'RM', 'LW', 'RW', 'CAM'].includes(position) ? 3.0 : 0.0;
+                return (passing * 0.45) + (dribbling * 0.25) + (pace * 0.10) + (overall * 0.20) + wideBonus + lineupBonus;
+            }
+            return overall;
+        };
+        const getSelectedLineupIds = () => {
+            const ids = new Set();
+            slotSelects.forEach(select => {
+                if (select.value) ids.add(String(select.value));
+            });
+            return Array.from(ids);
+        };
+        const rebuildResponsibilitySelectors = () => {
+            const selectedIds = getSelectedLineupIds();
+            roleFields.forEach(field => {
+                const select = roleSelects.find(s => s.dataset.field === field);
+                if (!select) return;
+                const previouslySelected = select.value;
+                select.innerHTML = '<option value="">-- بدون انتخاب --</option>';
+                const ranked = selectedIds
+                    .map(id => playerById.get(id))
+                    .filter(Boolean)
+                    .map(player => ({
+                        player,
+                        score: calcScore(player, field),
+                    }))
+                    .sort((a, b) => (b.score - a.score) || ((Number(b.player.overall || 0) - Number(a.player.overall || 0))) || (Number(a.player.id || 0) - Number(b.player.id || 0)));
+
+                ranked.forEach((item, idx) => {
+                    const p = item.player;
+                    const option = document.createElement('option');
+                    option.value = String(p.id);
+                    const best = idx === 0 ? '⭐ ' : '';
+                    option.textContent = `${best}${p.name} | ${p.position} | OVR ${Number(p.overall || 0)} | Score ${item.score.toFixed(1)}`;
+                    if (previouslySelected && previouslySelected === String(p.id)) {
+                        option.selected = true;
+                    }
+                    select.appendChild(option);
+                });
+            });
+
+            if (roleHint) {
+                if (selectedIds.length < 11) {
+                    roleHint.textContent = 'ترکیب هنوز کامل نیست؛ مسئولیت‌ها فقط از بازیکنان انتخاب‌شده فعلی قابل انتخاب هستند.';
+                } else {
+                    roleHint.textContent = 'مسئولیت‌ها بر اساس ۱۱ بازیکن انتخاب‌شده فعلی در ترکیب اصلی تنظیم می‌شوند.';
+                }
+            }
         };
 
         if (form) {
@@ -246,8 +319,11 @@
                         other.value = '';
                     }
                 });
+                rebuildResponsibilitySelectors();
             });
         });
+
+        rebuildResponsibilitySelectors();
     })();
 </script>
 <?php require_once __DIR__ . '/../layout/footer.php'; ?>

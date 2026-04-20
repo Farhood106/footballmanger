@@ -202,7 +202,7 @@ class TacticModel extends BaseModel {
 
     public function saveLineup(int $clubId, string $phaseKey, array $lineup): void {
         $this->db->query(
-            "UPDATE tactic_lineups SET is_active = 0 WHERE club_id = ? AND phase_key = ?",
+            "DELETE FROM tactic_lineups WHERE club_id = ? AND phase_key = ?",
             [$clubId, $phaseKey]
         );
 

@@ -96,6 +96,23 @@ class SquadController extends Controller {
         $activeTactic = $this->tacticModel->normalizeResponsibilitiesForLineup($activeTactic, $lineupBoard);
         $activeTactic['mentality'] = $this->tacticModel->normalizeMentality((string)($activeTactic['mentality'] ?? ''));
         $responsibilityRankings = $this->tacticModel->buildResponsibilityRankings($squad, $lineupBoard);
+        $responsibilityPlayerPool = array_values(array_map(function (array $player): array {
+            $pid = (int)($player['id'] ?? 0);
+            $fullName = trim((string)(($player['first_name'] ?? '') . ' ' . ($player['last_name'] ?? '')));
+            return [
+                'id' => $pid,
+                'name' => $fullName !== '' ? $fullName : ('Player #' . $pid),
+                'position' => (string)($player['position'] ?? ''),
+                'overall' => (int)($player['overall'] ?? 0),
+                'shooting' => (int)($player['shooting'] ?? 0),
+                'passing' => (int)($player['passing'] ?? 0),
+                'dribbling' => (int)($player['dribbling'] ?? 0),
+                'pace' => (int)($player['pace'] ?? 0),
+                'physical' => (int)($player['physical'] ?? 0),
+                'morale' => (float)($player['morale'] ?? 6.5),
+                'squad_role' => strtoupper((string)($player['squad_role'] ?? 'ROTATION')),
+            ];
+        }, $squad));
         $mentalities = $this->tacticModel->getValidMentalities();
 
         $this->view('squad/tactics', [
@@ -108,6 +125,7 @@ class SquadController extends Controller {
             'phase_key' => $phaseKey,
             'lineup_board' => $lineupBoard,
             'responsibility_rankings' => $responsibilityRankings,
+            'responsibility_player_pool' => $responsibilityPlayerPool,
         ]);
     }
 
@@ -178,14 +196,18 @@ class SquadController extends Controller {
         if ($freekickTaker > 0 && $normalizedRoles['freekick_taker'] === null) $clearedRoles[] = 'ضربه آزاد';
         if ($cornerTaker > 0 && $normalizedRoles['corner_taker'] === null) $clearedRoles[] = 'کرنر';
 
-        $this->tacticModel->saveSetupAndLineup($clubId, [
-            'formation' => $formation,
-            'mentality' => $mentality,
-            'captain' => $normalizedRoles['captain'],
-            'penalty_taker' => $normalizedRoles['penalty_taker'],
-            'freekick_taker' => $normalizedRoles['freekick_taker'],
-            'corner_taker' => $normalizedRoles['corner_taker'],
-        ], $phaseKey, $lineupRows);
+        try {
+            $this->tacticModel->saveSetupAndLineup($clubId, [
+                'formation' => $formation,
+                'mentality' => $mentality,
+                'captain' => $normalizedRoles['captain'],
+                'penalty_taker' => $normalizedRoles['penalty_taker'],
+                'freekick_taker' => $normalizedRoles['freekick_taker'],
+                'corner_taker' => $normalizedRoles['corner_taker'],
+            ], $phaseKey, $lineupRows);
+        } catch (Throwable $e) {
+            $this->json(['error' => 'ذخیره تاکتیک ناموفق بود. لطفاً دوباره تلاش کنید.'], 500);
+        }
 
         $message = 'تاکتیک با موفقیت ذخیره شد';
         if (!empty($clearedRoles)) {
